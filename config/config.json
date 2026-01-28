@@ -1,0 +1,20 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "po-request-form-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/poRequestForm/PoRequestFormWebPart.js",
+          "manifest": "./src/webparts/poRequestForm/PoRequestFormWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "PoRequestFormWebPartStrings": "lib/webparts/poRequestForm/loc/{locale}.js",
+    "PropertyControlStrings": "node_modules/@pnp/spfx-property-controls/lib/loc/{locale}.js",
+    "ControlStrings": "node_modules/@pnp/spfx-controls-react/lib/loc/{locale}.js"
+  }
+}

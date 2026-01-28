@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "fl-procurement-po-requests-client-side-solution",
+    "id": "bbfceab6-b540-4654-a3fb-523574cbcc4f",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.21.1"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "FL.Procurement.PORequests description"
+      },
+      "longDescription": {
+        "default": "FL.Procurement.PORequests description"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "fl-procurement-po-requests Feature",
+        "description": "The feature that activates elements of the fl-procurement-po-requests solution.",
+        "id": "6bc9e322-641f-4482-bf05-c604ad9cba72",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/fl-procurement-po-requests.sppkg"
+  }
+}
