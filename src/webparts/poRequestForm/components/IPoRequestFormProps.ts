@@ -30,7 +30,7 @@ export interface IPoRequestFormProps {
   /** ✅ NUEVA LISTA: APPROVERS (reglas / aprobadores) */
   approversListId: string | null;
   approversListTitle?: string;
-authorizersListId: string;
+authorizersListId: string | null;
   authorizersListTitle?: string;
   pageSize: number;
   goBackUrl?: string;

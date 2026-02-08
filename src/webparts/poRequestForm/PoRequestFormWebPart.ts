@@ -52,7 +52,7 @@ export interface IPORequestFormWebPartProps {
   companiesListId: string | null;
   companiesListTitle?: string;
 
-  authorizersListId: string;
+  authorizersListId: string | null;
   authorizersListTitle?: string;
   /** ✅ NUEVA LISTA PARA APPROVERS (reglas / aprobadores) */
   approversListId: string | null;
@@ -71,37 +71,32 @@ export default class PORequestFormWebPart
   private _sp: SPFI;
 
   /** Inicializa PnPjs con el contexto SPFx */
-  protected async onInit(): Promise<void> {
-    this._sp = spfi().using(SPFx(this.context));
+ protected async onInit(): Promise<void> {
+  this._sp = spfi().using(SPFx(this.context));
 
-    if (this.properties.pageSize === undefined) this.properties.pageSize = 25;
+  if (this.properties.pageSize === undefined) this.properties.pageSize = 25;
 
-    if (!this.properties.parentListId) this.properties.parentListId = null;
-    if (!this.properties.childListId) this.properties.childListId = null;
-    if (!this.properties.suppliersListId) this.properties.suppliersListId = null;
-    if (!this.properties.supplierChildListId) this.properties.supplierChildListId = null;
+  if (!this.properties.parentListId) this.properties.parentListId = null;
+  if (!this.properties.childListId) this.properties.childListId = null;
+  if (!this.properties.suppliersListId) this.properties.suppliersListId = null;
+  if (!this.properties.supplierChildListId) this.properties.supplierChildListId = null;
+  if (!this.properties.projectsListId) this.properties.projectsListId = null;
+  if (!this.properties.glCodesListId) this.properties.glCodesListId = null;
+  // ✅ CAMBIO AQUÍ: usar null en lugar de ''
+  if (!this.properties.authorizersListId) this.properties.authorizersListId = null;
+  if(!this.properties.authorizersListTitle) this.properties.authorizersListTitle = undefined;
+  if (!this.properties.companiesListId) this.properties.companiesListId = null;
+  if (!this.properties.approversListId) this.properties.approversListId = null;
 
-    // ✅ Coding dropdown lists
-    if (!this.properties.projectsListId) this.properties.projectsListId = null;
-    if (!this.properties.glCodesListId) this.properties.glCodesListId = null;
-    if (!this.properties.authorizersListId) this.properties.authorizersListId = '';
-    if(!this.properties.authorizersListTitle) this.properties.authorizersListTitle = '';
-    // ✅ Companies list
-    if (!this.properties.companiesListId) this.properties.companiesListId = null;
+  if (this.properties.goBackUrl === undefined) this.properties.goBackUrl = '';
 
-    // ✅ Approvers list
-    if (!this.properties.approversListId) this.properties.approversListId = null;
-
-    if (this.properties.goBackUrl === undefined) this.properties.goBackUrl = '';
-
-    if (!(window as any).__fluentIconsInitialized) {
-      initializeIcons();
-      (window as any).__fluentIconsInitialized = true;
-    }
-
-    return super.onInit();
+  if (!(window as any).__fluentIconsInitialized) {
+    initializeIcons();
+    (window as any).__fluentIconsInitialized = true;
   }
 
+  return super.onInit();
+}
   public render(): void {
     const element: React.ReactElement<IPoRequestFormProps> = React.createElement(
       PORequestForm,
@@ -398,21 +393,21 @@ export default class PORequestFormWebPart
                 }),
 
                 // ✅ Approvers (NEW)
-                PropertyFieldListPicker('approversListId', {
-                  label: 'Lista de Approvers (reglas/aprobadores)',
-                  selectedList: this.properties.approversListId || undefined,
-                  includeHidden: false,
-                  orderBy: PropertyFieldListPickerOrderBy.Title,
-                  disabled: false,
-                  multiSelect: false,
-                  onPropertyChange: this.onPropertyPaneFieldChanged.bind(this),
-                  properties: this.properties,
-                  context: this.context,
-                  deferredValidationTime: 200,
-                  key: 'approversListPicker'
-                }),
-                PropertyPaneTextField('approversListTitle', {
-                  label: 'Nombre (solo lectura) - Approvers',
+               PropertyFieldListPicker('authorizersListId', {
+  label: 'Lista de Authorizers (reglas/aprobadores)',
+  selectedList: this.properties.authorizersListId || undefined,  // ← Importante: usar undefined si es null
+  includeHidden: false,
+  orderBy: PropertyFieldListPickerOrderBy.Title,
+  disabled: false,
+  multiSelect: false,
+  onPropertyChange: this.onPropertyPaneFieldChanged.bind(this),
+  properties: this.properties,
+  context: this.context,
+  deferredValidationTime: 200,
+  key: 'authorizersListPicker'
+}),
+                PropertyPaneTextField('authorizersListTitle', {
+                  label: 'Nombre (solo lectura) - Authorizers',
                   description: 'Se completa automáticamente al elegir la lista',
                   multiline: false,
                   disabled: true

@@ -29,7 +29,6 @@ import flLogo from '../assets/fl_logo.jpg';
 /* ==================== TIPOS ==================== */
 type Priority = 'Normal' | 'Urgent';
 type RequestType = 'Goods' | 'Services' | 'Software/License';
-// AGREGAR procurement y finance al RoleKey
 type RoleKey = 'requester' | 'supervisor' | 'staffManager' | 'manager' | 'director' | 'vp' | 'cfo' | 'ceo' | 'procurement' | 'finance';
 type ApprovalStatus = 'Agree' | 'Disagree' | 'Pending';
 type BudgetType = 'Budgeted' | 'Non-Budgeted';
@@ -66,8 +65,6 @@ interface PRHeader {
   vp?: IPeoplePickerUserItem | null;
   cfo?: IPeoplePickerUserItem | null;
   ceo?: IPeoplePickerUserItem | null;
-  
-  // AGREGAR Procurement y Finance
   procurement?: IPeoplePickerUserItem | null;
   finance?: IPeoplePickerUserItem | null;
 
@@ -78,8 +75,6 @@ interface PRHeader {
   vpDate?: string;
   cfoDate?: string;
   ceoDate?: string;
-  
-  // AGREGAR fechas para Procurement y Finance
   procurementDate?: string;
   financeDate?: string;
 
@@ -90,8 +85,6 @@ interface PRHeader {
   vpStatus?: ApprovalStatus;
   cfoStatus?: ApprovalStatus;
   ceoStatus?: ApprovalStatus;
-  
-  // AGREGAR status para Procurement y Finance
   procurementStatus?: ApprovalStatus;
   financeStatus?: ApprovalStatus;
 
@@ -156,6 +149,7 @@ interface CompanyItem {
 interface AuthorizationRule {
   Id: number;
   Title: string;
+  Department: string;
   BudgetType: 'Budgeted' | 'Non-Budgeted';
   Position: string;
   Name: string;
@@ -176,11 +170,10 @@ const PERSON_FIELD_INTERNALS: Partial<Record<RoleKey, string>> = {
   vp: 'VP',
   cfo: 'CFO',
   ceo: 'CEO',
-  procurement: 'Procurement', // AGREGAR
-  finance: 'Finance' // AGREGAR
+  procurement: 'Procurement',
+  finance: 'Finance'
 };
 
-// ACTUALIZAR para incluir Procurement y Finance
 const ROLE_PERSON_TITLE_CANDIDATES: Record<RoleKey, string[]> = {
   requester: ['Requester'],
   supervisor: ['Supervisor'],
@@ -190,11 +183,10 @@ const ROLE_PERSON_TITLE_CANDIDATES: Record<RoleKey, string[]> = {
   vp: ['VP'],
   cfo: ['CFO'],
   ceo: ['CEO'],
-  procurement: ['Procurement'], // AGREGAR
-  finance: ['Finance', 'Finance Final'] // AGREGAR
+  procurement: ['Procurement'],
+  finance: ['Finance', 'Finance Final']
 };
 
-// ACTUALIZAR para incluir Procurement y Finance
 const ROLE_DATE_TITLES: Record<RoleKey, string[]> = {
   requester: [],
   supervisor: ['Supervisor Date'],
@@ -204,11 +196,10 @@ const ROLE_DATE_TITLES: Record<RoleKey, string[]> = {
   vp: ['VP Date'],
   cfo: ['CFO Date'],
   ceo: ['CEO Date'],
-  procurement: ['Procurement Date'], // AGREGAR
-  finance: ['Finance Date', 'Finance (Final) Date'] // AGREGAR
+  procurement: ['Procurement Date'],
+  finance: ['Finance Date', 'Finance (Final) Date']
 };
 
-// ACTUALIZAR para incluir Procurement y Finance
 const ROLE_STATUS_TITLES: Partial<Record<RoleKey, string[]>> = {
   supervisor: ['Supervisor status', 'Supervisor Status'],
   staffManager: ['Staff Manager status', 'Staff Manager Status'],
@@ -217,8 +208,8 @@ const ROLE_STATUS_TITLES: Partial<Record<RoleKey, string[]>> = {
   vp: ['VP status', 'VP Status'],
   cfo: ['CFO status', 'CFO Status'],
   ceo: ['CEO status', 'CEO Status'],
-  procurement: ['Procurement status', 'Procurement Status'], // AGREGAR
-  finance: ['Finance status', 'Finance Status'] // AGREGAR
+  procurement: ['Procurement status', 'Procurement Status'],
+  finance: ['Finance status', 'Finance Status']
 };
 
 const CHILD_INTERNALS = {
@@ -360,8 +351,8 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     vpStatus: 'Pending',
     cfoStatus: 'Pending',
     ceoStatus: 'Pending',
-    procurementStatus: 'Pending', // AGREGAR
-    financeStatus: 'Pending', // AGREGAR
+    procurementStatus: 'Pending',
+    financeStatus: 'Pending',
     srded: false,
     cmif: false
   };
@@ -737,10 +728,10 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
 
       let url: string;
       if (authorizersListId) {
-        url = `${siteUrl}/_api/web/lists(guid'${authorizersListId}')/items?$select=Id,Title,BudgetType,Position,Name,Email,MinLimit,MaxLimit,IsNil,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists(guid'${authorizersListId}')/items?$select=Id,Title,Department,BudgetType,Position,Name,Email,MinLimit,MaxLimit,IsNil,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
       } else {
         const listEscaped = authorizersListTitle!.replace(/'/g, "''");
-        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Id,Title,BudgetType,Position,Name,Email,MinLimit,MaxLimit,IsNil,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Id,Title,Department,BudgetType,Position,Name,Email,MinLimit,MaxLimit,IsNil,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
       }
 
       const js = await spGet(url);
@@ -757,98 +748,130 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   }, [authorizersListId, authorizersListTitle, siteUrl, spGet, showSnack]);
 
   const getRequiredAuthorizers = React.useCallback(
-    (area: string, budgetType: BudgetType, totalAmount: number): RoleKey[] => {
-      const required: RoleKey[] = ['supervisor'];
+  (area: string, budgetType: BudgetType, totalAmount: number): RoleKey[] => {
+    const required: RoleKey[] = ['supervisor'];
 
-      if (!area || !budgetType) return required;
+    if (!area || !budgetType) return required;
 
-      const applicableRules = authorizationRules.filter(
-        rule => norm(rule.Title) === norm(area) && rule.BudgetType === budgetType && rule.IsActive
-      );
+    const applicableRules = authorizationRules.filter(
+      rule => norm(rule.Department) === norm(area) &&
+              rule.BudgetType === budgetType &&
+              rule.IsActive
+    );
 
-      for (const rule of applicableRules) {
-        let matches = false;
+    for (const rule of applicableRules) {
+      let matches = false;
 
-        if (rule.IsNil) {
-          matches = true;
-        } else if (rule.MinLimit != null && rule.MaxLimit != null) {
-          matches = totalAmount >= rule.MinLimit && totalAmount <= rule.MaxLimit;
-        } else if (rule.MinLimit != null) {
-          matches = totalAmount >= rule.MinLimit;
-        } else if (rule.MaxLimit != null) {
-          matches = totalAmount <= rule.MaxLimit;
-        }
-
-        if (matches) {
-          const position = norm(rule.Position);
-          if (position.includes('staff') && position.includes('manager')) required.push('staffManager');
-          else if (position.includes('manager')) required.push('manager');
-          if (position.includes('director')) required.push('director');
-          if (position.includes('vp')) required.push('vp');
-          if (position.includes('cfo')) required.push('cfo');
-          if (position.includes('ceo')) required.push('ceo');
-        }
+      if (rule.IsNil) {
+        matches = true;
+      } else if (rule.MinLimit != null && rule.MaxLimit != null) {
+        matches = totalAmount >= rule.MinLimit && totalAmount <= rule.MaxLimit;
+      } else if (rule.MinLimit != null) {
+        matches = totalAmount >= rule.MinLimit;
+      } else if (rule.MaxLimit != null) {
+        matches = totalAmount <= rule.MaxLimit;
       }
 
-      return Array.from(new Set(required));
-    },
-    [authorizationRules]
+      if (matches) {
+        const position = norm(rule.Position);
+        if (position.includes('staff') && position.includes('manager')) required.push('staffManager');
+        else if (position.includes('manager')) required.push('manager');
+        if (position.includes('director')) required.push('director');
+        if (position.includes('vp')) required.push('vp');
+        if (position.includes('cfo')) required.push('cfo');
+        if (position.includes('ceo')) required.push('ceo');
+        if (position.includes('procurement')) required.push('procurement');
+        if (position.includes('finance')) required.push('finance');
+      }
+    }
+
+    return Array.from(new Set(required));
+  },
+  [authorizationRules]
+);
+
+ const autoPopulateApprovers = React.useCallback(() => {
+  if (!headerDraft.area || !headerDraft.budgetType) {
+    showSnack('Please select Area and Budget Type first', 'error');
+    return;
+  }
+
+  const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
+  const requiredRoles = getRequiredAuthorizers(headerDraft.area, headerDraft.budgetType, totalAmount);
+
+  // Resetear todos los aprobadores excepto supervisor
+  const resetApprovers: Partial<PRHeader> = {
+    staffManager: null,
+    manager: null,
+    director: null,
+    vp: null,
+    cfo: null,
+    ceo: null,
+    procurement: null,
+    finance: null
+  };
+  setHeaderDraft(prev => ({ ...prev, ...resetApprovers }));
+
+  // Mostrar solo los aprobadores requeridos
+  const rolesToShow: RoleKey[] = ['supervisor', ...requiredRoles.filter(r => r !== 'supervisor')];
+
+  // Filtrar las reglas de autorización para el área y tipo de presupuesto
+  const applicableRules = authorizationRules.filter(
+    rule => norm(rule.Department) === norm(headerDraft.area) &&
+            rule.BudgetType === headerDraft.budgetType &&
+            rule.IsActive
   );
 
-  const autoPopulateApprovers = React.useCallback(() => {
-    if (!headerDraft.area || !headerDraft.budgetType) {
-      showSnack('Please select Area and Budget Type first', 'error');
-      return;
-    }
+  // Mapeo de roles a palabras clave en Position
+  const positionKeywords: Record<Exclude<RoleKey, 'requester'>, string[]> = {
+    supervisor: ['supervisor'],
+    staffManager: ['staff', 'manager'],
+    manager: ['manager'],
+    director: ['director'],
+    vp: ['vp'],
+    cfo: ['cfo'],
+    ceo: ['ceo'],
+    procurement: ['procurement'],
+    finance: ['finance']
+  };
 
-    const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
-    const requiredRoles = getRequiredAuthorizers(headerDraft.area, headerDraft.budgetType, totalAmount);
+  // Para cada rol requerido, buscar en las reglas
+  for (const role of rolesToShow) {
+    if (role === 'requester' || role === 'supervisor') continue;
 
-    for (const role of requiredRoles) {
-      if (role === 'supervisor') continue;
+    const keywords = positionKeywords[role];
+    let foundRule: AuthorizationRule | null = null;
 
-      const applicableRules = authorizationRules.filter(
-        rule => norm(rule.Title) === norm(headerDraft.area) &&
-                rule.BudgetType === headerDraft.budgetType &&
-                rule.IsActive
-      );
-
-      const positionMap: Record<RoleKey, string> = {
-        requester: '',
-        supervisor: '',
-        staffManager: 'Staff Manager',
-        manager: 'Manager',
-        director: 'Director',
-        vp: 'VP',
-        cfo: 'CFO',
-        ceo: 'CEO',
-        procurement: 'Procurement', // AGREGAR
-        finance: 'Finance' // AGREGAR
-      };
-
-      for (const rule of applicableRules) {
-        if (norm(rule.Position) === norm(positionMap[role])) {
-          const pickerItem: IPeoplePickerUserItem = {
-            id: String(rule.Id),
-            loginName: rule.Email,
-            text: rule.Name,
-            secondaryText: rule.Email,
-            imageUrl: '',
-            imageInitials: '',
-            tertiaryText: '',
-            optionalText: ''
-          };
-
-          setHeaderDraft(prev => ({
-            ...prev,
-            [role]: pickerItem
-          }));
-          break;
-        }
+    // Buscar la regla que coincida con todas las palabras clave del rol
+    for (const rule of applicableRules) {
+      const posNorm = norm(rule.Position);
+      const matches = keywords.every(kw => posNorm.includes(kw));
+      if (matches) {
+        foundRule = rule;
+        break;
       }
     }
-  }, [headerDraft.area, headerDraft.budgetType, lines, getRequiredAuthorizers, authorizationRules]);
 
+    if (foundRule) {
+      const pickerItem: IPeoplePickerUserItem = {
+        id: String(foundRule.Id),
+        loginName: foundRule.Email,
+        text: foundRule.Name,
+        secondaryText: foundRule.Email,
+        imageUrl: '',
+        imageInitials: '',
+        tertiaryText: '',
+        optionalText: ''
+      };
+
+      setHeaderDraft(prev => ({
+        ...prev,
+        [role]: pickerItem
+      }));
+    }
+  }
+}, [headerDraft.area, headerDraft.budgetType, lines, getRequiredAuthorizers, authorizationRules]);
+  
   const loadGlCodes = React.useCallback(async () => {
     if (!glCodesListId && !glCodesListTitle) return;
     try {
@@ -928,6 +951,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   const [glSearchDebounced, setGlSearchDebounced] = React.useState<string>("");
   const [glPage, setGlPage] = React.useState<number>(1);
   const [glOpenUp, setGlOpenUp] = React.useState<boolean>(false);
+  const [glNoPagination, setGlNoPagination] = React.useState<boolean>(false);
   const glWrapRef = React.useRef<HTMLDivElement>(null);
   const glInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -1084,10 +1108,14 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   );
 
   const glPaged = React.useMemo(() => {
-    const safePage = Math.min(Math.max(1, glPage), glTotalPages);
-    const start = (safePage - 1) * GL_DD_PAGE_SIZE;
-    return glFiltered.slice(start, start + GL_DD_PAGE_SIZE);
-  }, [glFiltered, glPage, glTotalPages]);
+    if (glNoPagination) {
+      return glFiltered;
+    } else {
+      const safePage = Math.min(Math.max(1, glPage), glTotalPages);
+      const start = (safePage - 1) * GL_DD_PAGE_SIZE;
+      return glFiltered.slice(start, start + GL_DD_PAGE_SIZE);
+    }
+  }, [glFiltered, glPage, glTotalPages, glNoPagination]);
 
   React.useEffect(() => {
     if (glPage > glTotalPages) setGlPage(glTotalPages);
@@ -1103,6 +1131,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     setHeaderDraft(prev => ({ ...prev, glCode: item.Title }));
     setGlOpen(false);
     setGlSearch('');
+    setGlNoPagination(false);
   }, []);
 
   // ===================== Project dropdown logic =====================
@@ -1247,6 +1276,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       if (!inGl) {
         setGlOpen(false);
         setGlSearch('');
+        setGlNoPagination(false);
       }
       if (!inPj) {
         setProjOpen(false);
@@ -1262,6 +1292,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       if (e.key !== 'Escape') return;
       setGlOpen(false);
       setGlSearch('');
+      setGlNoPagination(false);
       setProjOpen(false);
       setProjSearch('');
       setCompanyOpen(false);
@@ -1371,6 +1402,68 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     return null;
   };
 
+  /* ============ NUEVA FUNCIÓN: Generar número de PR por compañía ============ */
+  const getNextPRNumberForCompany = React.useCallback(async (companyCode: string): Promise<string> => {
+    try {
+      if (!companyCode || !parentRef) {
+        return `R${new Date().getTime()}`;
+      }
+      
+      // Definir rangos por compañía según las especificaciones
+      const companyRanges: Record<string, { prefix: string; start: number; end: number }> = {
+        'L01': { prefix: '1', start: 100000, end: 199999 },
+        'L02': { prefix: '2', start: 200000, end: 299999 },
+        'L03': { prefix: '3', start: 300000, end: 399999 },
+        'L04': { prefix: '4', start: 400000, end: 499999 }
+      };
+      
+      const range = companyRanges[companyCode];
+      if (!range) {
+        console.warn(`Company code not configured: ${companyCode}`);
+        return `R${companyCode}-${new Date().getTime()}`;
+      }
+      
+      // Buscar el último número de PR para esta compañía
+      const filter = `startswith(Title, 'R${range.prefix}')`;
+      const url = `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items?$filter=${filter}&$select=Title&$orderby=Title desc&$top=1`;
+      
+      const response = await spGet(url);
+      const items = response.value || [];
+      
+      let nextNumber: number;
+      
+      if (items.length > 0) {
+        const lastTitle = items[0].Title;
+        const numberMatch = lastTitle.match(/R(\d+)/);
+        
+        if (numberMatch) {
+          const lastNumber = parseInt(numberMatch[1], 10);
+          
+          if (lastNumber >= range.start && lastNumber <= range.end) {
+            nextNumber = lastNumber + 1;
+            if (nextNumber > range.end) {
+              console.error(`Limit reached for ${companyCode}`);
+              nextNumber = range.start;
+            }
+          } else {
+            console.warn(`Number ${lastNumber} out of range for ${companyCode}`);
+            nextNumber = range.start;
+          }
+        } else {
+          nextNumber = range.start;
+        }
+      } else {
+        nextNumber = range.start;
+      }
+      
+      return `R${nextNumber}`;
+      
+    } catch (error) {
+      console.error('Error in getNextPRNumberForCompany:', error);
+      return `R${companyCode}-${new Date().getTime()}`;
+    }
+  }, [parentRef, siteUrl, parentListEscName, spGet, listNameOrIdExpr]);
+
   /* =================== Loads =================== */
   const loadMySent = React.useCallback(async () => {
     if (!parentRef || !currentUserIdRef.current) return;
@@ -1470,7 +1563,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
 
       const makeQ = (role: RoleKey, personInt?: string | null, dateInt?: string | null): Q | null => {
         if (!personInt) return null;
-        const select: string[] = ['Id', 'Title', 'Created', `${personInt}/Id`, `${personInt}/Title`];
+        const select: string[] = ['Id', 'Title', `${personInt}/Id`, `${personInt}/Title`];
         if (dateInt) select.push(dateInt);
         const url =
           `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items` +
@@ -1774,6 +1867,17 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       trySetNumber('Subtotal', Number(sub.toFixed(2)));
       trySetNumber('Tax Total', Number(tax.toFixed(2)));
       trySetNumber('Grand Total', Number(grand.toFixed(2)));
+
+      // Generate PR Number usando la nueva función
+      let prNumber = '';
+      if (H.companyValue) {
+        // H.companyValue es el CompanyCodeforGLAccounts (L01, L02, etc.)
+        prNumber = await getNextPRNumberForCompany(H.companyValue);
+      } else {
+        prNumber = `R${new Date().getTime()}`;
+      }
+
+      body['Title'] = prNumber;
 
       // Create parent
       const parentList =
@@ -2187,6 +2291,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     setEditingItemId(null);
     setHasAnyApproval(false);
     setSignFormRoles(null);
+    setGlNoPagination(false);
   };
 
   // SWITCH VIEW
@@ -2197,6 +2302,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       setEditingItemId(null);
       setHasAnyApproval(false);
       setSignFormRoles(null);
+      setGlNoPagination(false);
     }
     setActiveView(v);
     if (v === 'mysent') await loadMySent();
@@ -2928,7 +3034,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
         margin: { left: marginLeft, right: RIGHT_MARGIN }
       });
 
-      doc.save(`PR-${itemId}.pdf`);
+      doc.save(`R${itemId}.pdf`);
       showSnack('PDF generated.', 'success');
     } catch (err: any) {
       showSnack(`Error generating PDF: ${err.message}`, 'error');
@@ -3066,6 +3172,35 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     const roAll = readOnlyMode !== null;
     const isToSign = readOnlyMode === 'tosign';
     const enableApprover = (role: RoleKey) => isToSign && (signFormRoles || []).includes(role);
+
+    // Determinar qué campos de aprobación mostrar
+    const showApprovalFields = (role: RoleKey): boolean => {
+      // Siempre mostrar supervisor
+      if (role === 'supervisor') return true;
+      
+      // Si es modo lectura, mostrar todos
+      if (roAll) return true;
+      
+      // Si estamos en modo nuevo, mostrar solo los requeridos
+      if (!editingItemId) {
+        const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
+        const requiredRoles = getRequiredAuthorizers(headerDraft.area || '', headerDraft.budgetType || 'Budgeted', totalAmount);
+        return requiredRoles.includes(role);
+      }
+      
+      // Si estamos editando, mostrar el campo si ya tiene un valor asignado
+      switch (role) {
+        case 'staffManager': return !!headerDraft.staffManager;
+        case 'manager': return !!headerDraft.manager;
+        case 'director': return !!headerDraft.director;
+        case 'vp': return !!headerDraft.vp;
+        case 'cfo': return !!headerDraft.cfo;
+        case 'ceo': return !!headerDraft.ceo;
+        case 'procurement': return !!headerDraft.procurement;
+        case 'finance': return !!headerDraft.finance;
+        default: return false;
+      }
+    };
 
     return (
       <>
@@ -3349,6 +3484,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                       setProjOpen(false);
                       setCompanyOpen(false);
                       setGlPage(1);
+                      setGlNoPagination(false);
                     }}
                     disabled={roAll}
                     autoComplete="off"
@@ -3367,6 +3503,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                           setGlPage(1);
                         } else {
                           setGlSearch('');
+                          setGlNoPagination(false);
                         }
                         return next;
                       });
@@ -3386,140 +3523,186 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
 
                   {loadingGlCodes && <div className={styles.selectHint}>Loading GL codes...</div>}
 
-                  {glOpen && !roAll && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        zIndex: 50,
-                        left: 0,
-                        right: 0,
-                        top: glOpenUp ? undefined : 'calc(100% + 6px)',
-                        bottom: glOpenUp ? 'calc(100% + 6px)' : undefined,
-                        width: 'clamp(120px, 90vw, 580px)',
-                        maxWidth: '98vw',
-                        background: 'white',
-                        border: '1px solid rgba(0,0,0,0.12)',
-                        borderRadius: 12,
-                        boxShadow: '0 18px 45px rgba(0,0,0,0.15)',
-                        maxHeight: 460,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      {(() => {
-                        const glGridCols =
-                          '140px minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1fr)';
+     {glOpen && !roAll && (
+  <div
+    style={{
+      position: 'absolute',
+      zIndex: 50,
+      left: 0,
+      right: 0,
+      top: glOpenUp ? undefined : 'calc(100% + 6px)',
+      bottom: glOpenUp ? 'calc(100% + 6px)' : undefined,
+      width: 'clamp(120px, 90vw, 580px)',
+      maxWidth: '98vw',
+      background: 'white',
+      border: '1px solid rgba(0,0,0,0.12)',
+      borderRadius: 12,
+      boxShadow: '0 18px 45px rgba(0,0,0,0.15)',
+      maxHeight: glNoPagination ? '40vh' : 460,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}
+  >
+    {(() => {
+      const glGridCols = '140px minmax(150px, 1fr) minmax(150px, 1fr) minmax(180px, 1fr)';
 
-                        return (
-                          <>
-                            <div style={{ padding: 10, borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                              <div
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: glGridCols,
-                                  gap: 6,
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  opacity: 0.85,
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                <div>Account Code</div>
-                                <div>Cost Center Name</div>
-                                <div>Activity Code Name</div>
-                                <div>Natural Account Name</div>
-                              </div>
-                            </div>
+      return (
+        <>
+          {/* ✅ HEADER SOLO CON TÍTULOS - SIN BOTÓN */}
+          <div style={{ 
+            padding: 10, 
+            borderBottom: '1px solid rgba(0,0,0,0.08)',
+            display: 'grid',
+            gridTemplateColumns: glGridCols,
+            gap: 6,
+            fontSize: 10,
+            fontWeight: 700,
+            opacity: 0.85,
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            backgroundColor: '#fafafa'
+          }}>
+            <div>Account Code</div>
+            <div>Cost Center Name</div>
+            <div>Activity Code Name</div>
+            <div>Natural Account Name</div>
+          </div>
 
-                            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
-                              {glPaged.length === 0 ? (
-                                <div style={{ padding: 12, fontSize: 13, opacity: 0.75 }}>No results</div>
-                              ) : (
-                                glPaged.map((gl) => {
-                                  const isSel = (headerDraft.glCode || '') === gl.Title;
-                                  return (
-                                    <button
-                                      key={gl.Title}
-                                      type="button"
-                                      onMouseDown={(e) => e.preventDefault()}
-                                      onClick={() => pickGl(gl)}
-                                      style={{
-                                        width: '100%',
-                                        textAlign: 'left',
-                                        padding: '10px 10px',
-                                        border: 'none',
-                                        background: isSel ? 'rgba(0,0,0,0.05)' : 'transparent',
-                                        cursor: 'pointer'
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          display: 'grid',
-                                          gridTemplateColumns: glGridCols,
-                                          gap: 12,
-                                          fontSize: 13,
-                                          lineHeight: 1.2,
-                                          whiteSpace: 'nowrap'
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            fontFamily:
-                                              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-                                          }}
-                                        >
-                                          {gl.Title}
-                                        </div>
-                                        <div>{gl.CostCenterName || ''}</div>
-                                        <div>{gl.ActivityCodeName || ''}</div>
-                                        <div>{gl.NaturalAccountName || ''}</div>
-                                      </div>
-                                    </button>
-                                  );
-                                })
-                              )}
-                            </div>
-
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                                padding: 10,
-                                borderTop: '1px solid rgba(0,0,0,0.08)',
-                                background: 'white',
-                                flexShrink: 0
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                disabled={glPage <= 1}
-                                onClick={() => setGlPage((p) => Math.max(1, p - 1))}
-                              >
-                                ◀ Prev
-                              </button>
-
-                              <div style={{ fontSize: 12, opacity: 0.8 }}>
-                                Page {Math.min(glPage, glTotalPages)} / {glTotalPages} • {glFiltered.length} results
-                              </div>
-
-                              <button
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                disabled={glPage >= glTotalPages}
-                                onClick={() => setGlPage((p) => Math.min(glTotalPages, p + 1))}
-                              >
-                                Next ▶
-                              </button>
-                            </div>
-                          </>
-                        );
-                      })()}
+          {/* ✅ CONTENIDO SCROLLEABLE */}
+          <div style={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            overflowX: 'auto',
+            maxHeight: glNoPagination ? 'calc(8 * 40px)' : undefined 
+          }}>
+            {glPaged.length === 0 ? (
+              <div style={{ padding: 12, fontSize: 13, opacity: 0.75 }}>No results</div>
+            ) : (
+              glPaged.map((gl) => {
+                const isSel = (headerDraft.glCode || '') === gl.Title;
+                return (
+                  <button
+                    key={gl.Title}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickGl(gl)}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '10px 10px',
+                      border: 'none',
+                      background: isSel ? 'rgba(0,0,0,0.05)' : 'transparent',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(0,0,0,0.05)',
+                      display: 'grid',
+                      gridTemplateColumns: glGridCols,
+                      gap: 8,
+                      fontSize: 13,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+                    }}>
+                      {gl.Title}
                     </div>
-                  )}
+                    <div>{gl.CostCenterName || ''}</div>
+                    <div>{gl.ActivityCodeName || ''}</div>
+                    <div>{gl.NaturalAccountName || ''}</div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* ✅ FOOTER CON BOTÓN + PAGINACIÓN - COMPACTO */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 6,
+              padding: '8px 10px',
+              borderTop: '1px solid rgba(0,0,0,0.08)',
+              background: 'white',
+              flexShrink: 0,
+              flexWrap: 'wrap'
+            }}
+          >
+            {/* BOTÓN DE PAGINACIÓN */}
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setGlNoPagination(!glNoPagination)}
+              style={{
+                background: glNoPagination ? '#4f46e5' : '#f3f4f6',
+                color: glNoPagination ? 'white' : '#374151',
+                border: glNoPagination ? 'none' : '1px solid #d1d5db',
+                borderRadius: 4,
+                padding: '5px 10px',
+                fontSize: 10,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s',
+                order: 1
+              }}
+            >
+              {glNoPagination ? '▲ Paginated' : '▼ All'}
+            </button>
+
+            {/* CONTROLES DE PAGINACIÓN (solo si NOT sin paginación) */}
+            {!glNoPagination && (
+              <>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  disabled={glPage <= 1}
+                  onClick={() => setGlPage((p) => Math.max(1, p - 1))}
+                  style={{ order: 2, padding: '4px 8px', fontSize: 10 }}
+                >
+                  ◀
+                </button>
+
+                <div style={{ fontSize: 10, opacity: 0.8, order: 3, whiteSpace: 'nowrap' }}>
+                  {Math.min(glPage, glTotalPages)}/{glTotalPages}
+                </div>
+
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  disabled={glPage >= glTotalPages}
+                  onClick={() => setGlPage((p) => Math.min(glTotalPages, p + 1))}
+                  style={{ order: 4, padding: '4px 8px', fontSize: 10 }}
+                >
+                  ▶
+                </button>
+              </>
+            )}
+
+            {/* MENSAJE SIN PAGINACIÓN */}
+            {glNoPagination && glFiltered.length > 0 && (
+              <div
+                style={{
+                  fontSize: 10,
+                  color: '#6b7280',
+                  textAlign: 'center',
+                  width: '100%',
+                  order: 5
+                }}
+              >
+                All {glFiltered.length} • Scroll ↓
+              </div>
+            )}
+          </div>
+        </>
+      );
+    })()}
+  </div>
+)}
                 </div>
               </div>
             </div>
@@ -4056,7 +4239,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
             )}
           </Section>
 
-          {/* F. Approvals - CAMBIO CRÍTICO: TODOS SIEMPRE VISIBLES */}
+          {/* F. Approvals - MODIFICADO PARA MOSTRAR SOLO APROBADORES REQUERIDOS */}
           <Section title="F. Approvals" code="F">
             {/* Botón para auto-poblar aprobadores CON VALIDACIÓN */}
             {!roAll && (
@@ -4079,633 +4262,651 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
             )}
 
             {/* Supervisor - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="Supervisor" person={headerDraft.supervisor} />
-                <div className={styles.grid3}>
-                  <DateInput label="Supervisor Date" k="supervisorDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Supervisor Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.supervisorStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Supervisor</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('supervisor')}
-                      defaultSelectedUsers={
-                        headerDraft.supervisor ? [headerDraft.supervisor.secondaryText || headerDraft.supervisor.loginName || headerDraft.supervisor.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="Supervisor Date" k="supervisorDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Supervisor Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.supervisorStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {showApprovalFields('supervisor') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Supervisor" person={headerDraft.supervisor} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Supervisor Date" k="supervisorDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('supervisor') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('supervisor')}
-                          >
-                            Agree as Supervisor
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('supervisor')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>Supervisor Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.supervisorStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Supervisor</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('supervisor')}
+                        defaultSelectedUsers={
+                          headerDraft.supervisor ? [headerDraft.supervisor.secondaryText || headerDraft.supervisor.loginName || headerDraft.supervisor.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Supervisor Date" k="supervisorDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Supervisor Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.supervisorStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('supervisor') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('supervisor')}
+                            >
+                              Agree as Supervisor
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('supervisor')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* Staff Manager - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="Staff Manager" person={headerDraft.staffManager} />
-                <div className={styles.grid3}>
-                  <DateInput label="Staff Manager Date" k="staffManagerDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Staff Manager Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.staffManagerStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Staff Manager</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('staffManager')}
-                      defaultSelectedUsers={
-                        headerDraft.staffManager ? [headerDraft.staffManager.secondaryText || headerDraft.staffManager.loginName || headerDraft.staffManager.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="Staff Manager Date" k="staffManagerDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Staff Manager Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.staffManagerStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* Staff Manager - SOLO SI SE REQUIERE */}
+            {showApprovalFields('staffManager') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Staff Manager" person={headerDraft.staffManager} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Staff Manager Date" k="staffManagerDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('staffManager') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('staffManager')}
-                          >
-                            Agree as Staff Manager
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('staffManager')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>Staff Manager Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.staffManagerStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Staff Manager</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('staffManager')}
+                        defaultSelectedUsers={
+                          headerDraft.staffManager ? [headerDraft.staffManager.secondaryText || headerDraft.staffManager.loginName || headerDraft.staffManager.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Staff Manager Date" k="staffManagerDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Staff Manager Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.staffManagerStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('staffManager') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('staffManager')}
+                            >
+                              Agree as Staff Manager
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('staffManager')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* Manager - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="Manager" person={headerDraft.manager} />
-                <div className={styles.grid3}>
-                  <DateInput label="Manager Date" k="managerDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Manager Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.managerStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Manager</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('manager')}
-                      defaultSelectedUsers={
-                        headerDraft.manager ? [headerDraft.manager.secondaryText || headerDraft.manager.loginName || headerDraft.manager.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="Manager Date" k="managerDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Manager Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.managerStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* Manager - SOLO SI SE REQUIERE */}
+            {showApprovalFields('manager') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Manager" person={headerDraft.manager} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Manager Date" k="managerDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('manager') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('manager')}
-                          >
-                            Agree as Manager
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('manager')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>Manager Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.managerStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Manager</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('manager')}
+                        defaultSelectedUsers={
+                          headerDraft.manager ? [headerDraft.manager.secondaryText || headerDraft.manager.loginName || headerDraft.manager.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Manager Date" k="managerDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Manager Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.managerStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('manager') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('manager')}
+                            >
+                              Agree as Manager
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('manager')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* Director - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="Director" person={headerDraft.director} />
-                <div className={styles.grid3}>
-                  <DateInput label="Director Date" k="directorDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Director Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.directorStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Director</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('director')}
-                      defaultSelectedUsers={
-                        headerDraft.director ? [headerDraft.director.secondaryText || headerDraft.director.loginName || headerDraft.director.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="Director Date" k="directorDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Director Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.directorStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* Director - SOLO SI SE REQUIERE */}
+            {showApprovalFields('director') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Director" person={headerDraft.director} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Director Date" k="directorDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('director') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('director')}
-                          >
-                            Agree as Director
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('director')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>Director Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.directorStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Director</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('director')}
+                        defaultSelectedUsers={
+                          headerDraft.director ? [headerDraft.director.secondaryText || headerDraft.director.loginName || headerDraft.director.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Director Date" k="directorDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Director Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.directorStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('director') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('director')}
+                            >
+                              Agree as Director
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('director')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* VP - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="VP" person={headerDraft.vp} />
-                <div className={styles.grid3}>
-                  <DateInput label="VP Date" k="vpDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>VP Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.vpStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>VP</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('vp')}
-                      defaultSelectedUsers={
-                        headerDraft.vp ? [headerDraft.vp.secondaryText || headerDraft.vp.loginName || headerDraft.vp.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="VP Date" k="vpDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>VP Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.vpStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* VP - SOLO SI SE REQUIERE */}
+            {showApprovalFields('vp') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="VP" person={headerDraft.vp} />
+                  <div className={styles.grid3}>
+                    <DateInput label="VP Date" k="vpDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('vp') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('vp')}
-                          >
-                            Agree as VP
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('vp')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>VP Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.vpStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>VP</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('vp')}
+                        defaultSelectedUsers={
+                          headerDraft.vp ? [headerDraft.vp.secondaryText || headerDraft.vp.loginName || headerDraft.vp.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="VP Date" k="vpDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>VP Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.vpStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('vp') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('vp')}
+                            >
+                              Agree as VP
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('vp')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* CFO - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="CFO" person={headerDraft.cfo} />
-                <div className={styles.grid3}>
-                  <DateInput label="CFO Date" k="cfoDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>CFO Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.cfoStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>CFO</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('cfo')}
-                      defaultSelectedUsers={
-                        headerDraft.cfo ? [headerDraft.cfo.secondaryText || headerDraft.cfo.loginName || headerDraft.cfo.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="CFO Date" k="cfoDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>CFO Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.cfoStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* CFO - SOLO SI SE REQUIERE */}
+            {showApprovalFields('cfo') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="CFO" person={headerDraft.cfo} />
+                  <div className={styles.grid3}>
+                    <DateInput label="CFO Date" k="cfoDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('cfo') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('cfo')}
-                          >
-                            Agree as CFO
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('cfo')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>CFO Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.cfoStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>CFO</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('cfo')}
+                        defaultSelectedUsers={
+                          headerDraft.cfo ? [headerDraft.cfo.secondaryText || headerDraft.cfo.loginName || headerDraft.cfo.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="CFO Date" k="cfoDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>CFO Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.cfoStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('cfo') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('cfo')}
+                            >
+                              Agree as CFO
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('cfo')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* CEO - SIEMPRE VISIBLE */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="CEO" person={headerDraft.ceo} />
-                <div className={styles.grid3}>
-                  <DateInput label="CEO Date" k="ceoDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>CEO Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.ceoStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>CEO</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('ceo')}
-                      defaultSelectedUsers={
-                        headerDraft.ceo ? [headerDraft.ceo.secondaryText || headerDraft.ceo.loginName || headerDraft.ceo.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="CEO Date" k="ceoDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>CEO Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.ceoStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* CEO - SOLO SI SE REQUIERE */}
+            {showApprovalFields('ceo') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="CEO" person={headerDraft.ceo} />
+                  <div className={styles.grid3}>
+                    <DateInput label="CEO Date" k="ceoDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('ceo') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('ceo')}
-                          >
-                            Agree as CEO
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('ceo')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>CEO Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.ceoStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>CEO</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('ceo')}
+                        defaultSelectedUsers={
+                          headerDraft.ceo ? [headerDraft.ceo.secondaryText || headerDraft.ceo.loginName || headerDraft.ceo.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="CEO Date" k="ceoDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>CEO Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.ceoStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('ceo') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('ceo')}
+                            >
+                              Agree as CEO
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('ceo')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* Procurement - SIEMPRE VISIBLE (NUEVO) */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="Procurement" person={headerDraft.procurement} />
-                <div className={styles.grid3}>
-                  <DateInput label="Procurement Date" k="procurementDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Procurement Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.procurementStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Procurement</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('procurement')}
-                      defaultSelectedUsers={
-                        headerDraft.procurement ? [headerDraft.procurement.secondaryText || headerDraft.procurement.loginName || headerDraft.procurement.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="Procurement Date" k="procurementDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Procurement Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.procurementStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* Procurement - SOLO SI SE REQUIERE (NUEVO) */}
+            {showApprovalFields('procurement') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Procurement" person={headerDraft.procurement} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Procurement Date" k="procurementDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('procurement') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('procurement')}
-                          >
-                            Agree as Procurement
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('procurement')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>Procurement Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.procurementStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Procurement</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('procurement')}
+                        defaultSelectedUsers={
+                          headerDraft.procurement ? [headerDraft.procurement.secondaryText || headerDraft.procurement.loginName || headerDraft.procurement.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Procurement Date" k="procurementDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Procurement Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.procurementStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('procurement') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('procurement')}
+                            >
+                              Agree as Procurement
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('procurement')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
-            {/* Finance (Final) - SIEMPRE VISIBLE (NUEVO) */}
-            {readOnlyMode ? (
-              <>
-                <PersonView label="Finance (Final)" person={headerDraft.finance} />
-                <div className={styles.grid3}>
-                  <DateInput label="Finance Date" k="financeDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Finance Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.financeStatus || 'Pending'}
-                    </div>
-                  </div>
-                  <div className={styles.fieldGroup} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Finance (Final)</label>
-                  <div className={styles.peoplePicker}>
-                    <PeoplePicker
-                      context={peopleCtx}
-                      personSelectionLimit={1}
-                      ensureUser={true}
-                      showtooltip={true}
-                      principalTypes={[PrincipalType.User]}
-                      onChange={onPicker('finance')}
-                      defaultSelectedUsers={
-                        headerDraft.finance ? [headerDraft.finance.secondaryText || headerDraft.finance.loginName || headerDraft.finance.text].filter(Boolean) as string[] : []
-                      }
-                    />
-                  </div>
-                </div>
-                <div className={styles.grid3}>
-                  <DateInput label="Finance Date" k="financeDate" />
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Finance Status</label>
-                    <div className={styles.readonlyBox}>
-                      {headerDraft.financeStatus || 'Pending'}
-                    </div>
-                  </div>
-                  {readOnlyMode === 'tosign' ? (
+            {/* Finance (Final) - SOLO SI SE REQUIERE (NUEVO) */}
+            {showApprovalFields('finance') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Finance (Final)" person={headerDraft.finance} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Finance Date" k="financeDate" />
                     <div className={styles.fieldGroup}>
-                      {enableApprover('finance') && (
-                        <>
-                          <button
-                            type="button"
-                            className={styles.saveBtn}
-                            onClick={() => handleApprove('finance')}
-                          >
-                            Agree as Finance
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.resetBtn}
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleDisagree('finance')}
-                          >
-                            Disagree
-                          </button>
-                        </>
-                      )}
+                      <label className={styles.fieldLabel}>Finance Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.financeStatus || 'Pending'}
+                      </div>
                     </div>
-                  ) : (
                     <div className={styles.fieldGroup} />
-                  )}
-                </div>
-              </>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Finance (Final)</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('finance')}
+                        defaultSelectedUsers={
+                          headerDraft.finance ? [headerDraft.finance.secondaryText || headerDraft.finance.loginName || headerDraft.finance.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Finance Date" k="financeDate" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Finance Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.financeStatus || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('finance') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('finance')}
+                            >
+                              Agree as Finance
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('finance')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
             )}
 
             <div className={styles.grid3}>
@@ -5056,10 +5257,8 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
 };
-
 export default PoRequestForm;
