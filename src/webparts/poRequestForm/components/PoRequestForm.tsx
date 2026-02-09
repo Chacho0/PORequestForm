@@ -364,7 +364,13 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   const attachInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Lists
-  const [mySent, setMySent] = React.useState<any[]>([]);
+  const [, setMySent] = React.useState<any[]>([]);
+  const [mySentWithStatus, setMySentWithStatus] = React.useState<Array<{
+    item: any;
+    pendingRoles: RoleKey[];
+    approvedRoles: RoleKey[];
+    disagreeRoles: RoleKey[];
+  }>>([]);
   const [myApproved, setMyApproved] = React.useState<any[]>([]);
   const [myToSign, setMyToSign] = React.useState<Array<{ item: any; roles: RoleKey[] }>>([]);
 
@@ -1465,71 +1471,125 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   }, [parentRef, siteUrl, parentListEscName, spGet, listNameOrIdExpr]);
 
   /* =================== Loads =================== */
-  const loadMySent = React.useCallback(async () => {
-    if (!parentRef || !currentUserIdRef.current) return;
-    setListLoading(true);
-    try {
-      const dex = await getParentFieldIndex();
-      const nf = buildNameOfField(dex);
-      const meId = currentUserIdRef.current!;
-      const requesterInt = nf('Requester');
+const loadMySent = React.useCallback(async () => {
+  if (!parentRef || !currentUserIdRef.current) return;
+  setListLoading(true);
+  try {
+    const dex = await getParentFieldIndex();
+    const nf = buildNameOfField(dex);
+    const meId = currentUserIdRef.current!;
+    const requesterInt = nf('Requester');
 
-      const selectParts = [`Id`, `Title`, `Created`, `Author/Id`, `Author/Title`, `Author/EMail`];
-      const expandParts = [`Author`];
+    const selectParts = [`Id`, `Title`, `Created`, `Author/Id`, `Author/Title`, `Author/EMail`];
+    const expandParts = [`Author`];
 
-      let filter = `Author/Id eq ${meId}`;
-      if (requesterInt) {
-        selectParts.push(`${requesterInt}/Id`, `${requesterInt}/Title`);
-        expandParts.push(requesterInt);
-        filter = `(${requesterInt}/Id eq ${meId} or Author/Id eq ${meId})`;
+    let filter = `Author/Id eq ${meId}`;
+    if (requesterInt) {
+      selectParts.push(`${requesterInt}/Id`, `${requesterInt}/Title`);
+      expandParts.push(requesterInt);
+      filter = `(${requesterInt}/Id eq ${meId} or Author/Id eq ${meId})`;
+    }
+
+    // Precompute internal field names for all roles
+    const allRoles: RoleKey[] = ['supervisor', 'staffManager', 'manager', 'director', 'vp', 'cfo', 'ceo', 'procurement', 'finance'];
+
+    const roleFieldMap: Record<string, {
+      personInt: string | null;
+      dateInt: string | null;
+      statusInt: string | null;
+    }> = {};
+
+    for (const role of allRoles) {
+      const personInt = nameOfFirstExisting(dex, ROLE_PERSON_TITLE_CANDIDATES[role]);
+      const dateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES[role]);
+      const statusInt = nameOfFirstExisting(dex, ROLE_STATUS_TITLES[role] || []);
+
+      roleFieldMap[role] = { personInt, dateInt, statusInt };
+
+      // Add person field to $select/$expand
+      if (personInt) {
+        selectParts.push(`${personInt}/Id`, `${personInt}/Title`);
+        if (!expandParts.includes(personInt)) expandParts.push(personInt);
+      }
+      // Add date and status fields to $select
+      if (dateInt) selectParts.push(dateInt);
+      if (statusInt) selectParts.push(statusInt);
+    }
+
+    const url =
+      `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items` +
+      `?$select=${selectParts.join(',')}` +
+      `&$expand=${expandParts.join(',')}` +
+      `&$filter=${filter}` +
+      `&$orderby=Created desc&$top=${pageSize ?? 25}`;
+
+    const js = await spGet(url);
+    const rawItems = (js.value || js || []) as any[];
+
+    const itemsWithStatus: Array<{
+      item: any;
+      pendingRoles: RoleKey[];
+      approvedRoles: RoleKey[];
+      disagreeRoles: RoleKey[];
+    }> = [];
+
+    for (const item of rawItems) {
+      const pendingRoles: RoleKey[] = [];
+      const approvedRoles: RoleKey[] = [];
+      const disagreeRoles: RoleKey[] = [];
+
+      for (const role of allRoles) {
+        const { personInt, dateInt, statusInt } = roleFieldMap[role];
+
+        // ✅ Skip roles that have NO person assigned
+        if (!personInt) continue;
+        const personVal = item[personInt] || item[`${personInt}Id`];
+        const hasPersonAssigned = personVal != null
+          && personVal !== 0
+          && personVal !== ''
+          && !(typeof personVal === 'object' && personVal.Id == null);
+        if (!hasPersonAssigned) continue;
+
+        // Classify based on date and status
+        const hasDate = dateInt && item[dateInt];
+        const statusVal = statusInt ? item[statusInt] : undefined;
+
+        if (hasDate) {
+          if (statusVal === 'Agree') {
+            approvedRoles.push(role);
+          } else if (statusVal === 'Disagree') {
+            disagreeRoles.push(role);
+          } else {
+            approvedRoles.push(role);
+          }
+        } else {
+          if (statusVal === 'Agree') {
+            approvedRoles.push(role);
+          } else if (statusVal === 'Disagree') {
+            disagreeRoles.push(role);
+          } else {
+            pendingRoles.push(role);
+          }
+        }
       }
 
-      const url =
-        `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items` +
-        `?$select=${selectParts.join(',')}` +
-        `&$expand=${expandParts.join(',')}` +
-        `&$filter=${filter}` +
-        `&$orderby=Created desc&$top=${pageSize ?? 25}`;
-
-      const js = await spGet(url);
-      const rawItems = (js.value || js || []) as any[];
-
-      // Ocultar de "My PRs" los que tienen TODAS las aprobaciones
-      const supInt = await getPersonInternalForRole('supervisor');
-      const staffManagerInt = await getPersonInternalForRole('staffManager');
-      const managerInt = await getPersonInternalForRole('manager');
-      const directorInt = await getPersonInternalForRole('director');
-      const vpInt = await getPersonInternalForRole('vp');
-      const cfoInt = await getPersonInternalForRole('cfo');
-      const ceoInt = await getPersonInternalForRole('ceo');
-      const procurementInt = await getPersonInternalForRole('procurement');
-      const financeInt = await getPersonInternalForRole('finance');
-
-      const filtered = rawItems.filter(it => {
-        const sup = supInt ? !!it[`${supInt}Id`] : false;
-        const staff = staffManagerInt ? !!it[`${staffManagerInt}Id`] : false;
-        const mgr = managerInt ? !!it[`${managerInt}Id`] : false;
-        const dir = directorInt ? !!it[`${directorInt}Id`] : false;
-        const vp = vpInt ? !!it[`${vpInt}Id`] : false;
-        const cfo = cfoInt ? !!it[`${cfoInt}Id`] : false;
-        const ceo = ceoInt ? !!it[`${ceoInt}Id`] : false;
-        const proc = procurementInt ? !!it[`${procurementInt}Id`] : false;
-        const fin = financeInt ? !!it[`${financeInt}Id`] : false;
-        
-        // Verificar si TODOS los aprobadores requeridos han aprobado
-        const totalApprovals = [sup, staff, mgr, dir, vp, cfo, ceo, proc, fin].filter(Boolean).length;
-        const totalRoles = [supInt, staffManagerInt, managerInt, directorInt, vpInt, cfoInt, ceoInt, procurementInt, financeInt].filter(Boolean).length;
-        
-        return totalApprovals < totalRoles;
+      itemsWithStatus.push({
+        item,
+        pendingRoles,
+        approvedRoles,
+        disagreeRoles
       });
-
-      setMySent(filtered);
-    } catch {
-      setMySent([]);
-    } finally {
-      setListLoading(false);
     }
-  }, [parentRef, siteUrl, pageSize, spGet, parentListEscName]);
+
+    setMySentWithStatus(itemsWithStatus);
+    setMySent(rawItems);
+  } catch {
+    setMySent([]);
+    setMySentWithStatus([]);
+  } finally {
+    setListLoading(false);
+  }
+}, [parentRef, siteUrl, pageSize, spGet, parentListEscName]);
 
   // Approved
   const loadMyApproved = React.useCallback(async () => {
@@ -3174,34 +3234,38 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     const enableApprover = (role: RoleKey) => isToSign && (signFormRoles || []).includes(role);
 
     // Determinar qué campos de aprobación mostrar
-    const showApprovalFields = (role: RoleKey): boolean => {
-      // Siempre mostrar supervisor
-      if (role === 'supervisor') return true;
-      
-      // Si es modo lectura, mostrar todos
-      if (roAll) return true;
-      
-      // Si estamos en modo nuevo, mostrar solo los requeridos
-      if (!editingItemId) {
-        const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
-        const requiredRoles = getRequiredAuthorizers(headerDraft.area || '', headerDraft.budgetType || 'Budgeted', totalAmount);
-        return requiredRoles.includes(role);
-      }
-      
-      // Si estamos editando, mostrar el campo si ya tiene un valor asignado
-      switch (role) {
-        case 'staffManager': return !!headerDraft.staffManager;
-        case 'manager': return !!headerDraft.manager;
-        case 'director': return !!headerDraft.director;
-        case 'vp': return !!headerDraft.vp;
-        case 'cfo': return !!headerDraft.cfo;
-        case 'ceo': return !!headerDraft.ceo;
-        case 'procurement': return !!headerDraft.procurement;
-        case 'finance': return !!headerDraft.finance;
-        default: return false;
-      }
-    };
+   const showApprovalFields = (role: RoleKey): boolean => {
+  // Siempre mostrar supervisor
+  if (role === 'supervisor') return true;
 
+  // Helper: check if role has an assigned person
+  const hasPersonAssigned = (r: RoleKey): boolean => {
+    switch (r) {
+      case 'staffManager': return !!headerDraft.staffManager;
+      case 'manager': return !!headerDraft.manager;
+      case 'director': return !!headerDraft.director;
+      case 'vp': return !!headerDraft.vp;
+      case 'cfo': return !!headerDraft.cfo;
+      case 'ceo': return !!headerDraft.ceo;
+      case 'procurement': return !!headerDraft.procurement;
+      case 'finance': return !!headerDraft.finance;
+      default: return false;
+    }
+  };
+
+  // Si es modo lectura (mysent / tosign), solo mostrar roles con persona asignada
+  if (roAll) return hasPersonAssigned(role);
+  
+  // Si estamos en modo nuevo, mostrar solo los requeridos
+  if (!editingItemId) {
+    const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
+    const requiredRoles = getRequiredAuthorizers(headerDraft.area || '', headerDraft.budgetType || 'Budgeted', totalAmount);
+    return requiredRoles.includes(role);
+  }
+  
+  // Si estamos editando, mostrar el campo si ya tiene un valor asignado
+  return hasPersonAssigned(role);
+};
     return (
       <>
         {readOnlyMode === null && isLocked && (
@@ -4980,6 +5044,23 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     }));
   };
 
+  // Función para obtener el nombre legible del rol
+  const getRoleDisplayName = (role: RoleKey): string => {
+    const roleNames: Record<RoleKey, string> = {
+      supervisor: 'Supervisor',
+      staffManager: 'Staff Manager',
+      manager: 'Manager',
+      director: 'Director',
+      vp: 'VP',
+      cfo: 'CFO',
+      ceo: 'CEO',
+      procurement: 'Procurement',
+      finance: 'Finance',
+      requester: 'Requester'
+    };
+    return roleNames[role] || role;
+  };
+
   /* =================== Render =================== */
   return (
     <div className={styles.poRoot}>
@@ -5033,7 +5114,9 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
         {activeView === 'mysent' && (
           <form autoComplete="off" onSubmit={(e) => editingItemId ? updateParentAndLines(e) : createParentAndLines(e)}>
             <Section title="My PRs (sent)">
-              <div className={styles.miniHint}>{listLoading ? 'Loading...' : `${mySent.length} item(s)`}</div>
+              <div className={styles.miniHint}>
+                {listLoading ? 'Loading...' : `${mySentWithStatus.length} item(s) with pending approvals`}
+              </div>
               
               {/* Botón para expandir/colapsar la lista */}
               <button
@@ -5041,22 +5124,63 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                 className={styles.expandBtn}
                 onClick={() => toggleList('mysent')}
               >
-                {expandedLists.mysent ? '▲ Collapse' : '▼ Expand'} List ({mySent.length} items)
+                {expandedLists.mysent ? '▲ Collapse' : '▼ Expand'} List ({mySentWithStatus.length} items)
               </button>
               
-              {expandedLists.mysent && mySent.map(it => (
-                <div key={it.Id} className={styles.listRow}>
-                  <div>
-                    <div className={styles.bold}>{it.Title}</div>
-                    <div className={styles.miniHint}>ID: {it.Id} • {it.Created}</div>
+              {expandedLists.mysent && mySentWithStatus.map(({ item, pendingRoles, approvedRoles, disagreeRoles }) => (
+                <div key={item.Id} className={styles.listRow}>
+                  <div style={{ flex: 1 }}>
+                    <div className={styles.bold}>
+                      {item.Title}
+                      <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>
+                        (Pending: {pendingRoles.length} roles)
+                      </span>
+                    </div>
+                    <div className={styles.miniHint}>ID: {item.Id} • {item.Created}</div>
+                    
+                    {/* Mostrar estado de aprobación */}
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {pendingRoles.map(role => (
+                          <span
+                            key={role}
+                            style={{
+                              backgroundColor: '#fff3cd',
+                              color: '#856404',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              border: '1px solid #ffeaa7'
+                            }}
+                          >
+                            Pending: {getRoleDisplayName(role)}
+                          </span>
+                        ))}
+                        {approvedRoles.map(role => (
+                          <span
+                            key={role}
+                            style={{
+                              backgroundColor: '#d4edda',
+                              color: '#155724',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              border: '1px solid #c3e6cb'
+                            }}
+                          >
+                            Approved: {getRoleDisplayName(role)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div className={styles.rowBtns}>
                     <button
                       type="button"
                       className={styles.saveBtn}
                       onClick={async () => {
-                        await loadItemIntoForm(it.Id);
-                        showSnack(`Loaded PR #${it.Id} for view/edit`, 'info');
+                        await loadItemIntoForm(item.Id);
+                        showSnack(`Loaded PR #${item.Id} for view/edit`, 'info');
                       }}
                     >
                       Load & Edit
@@ -5146,7 +5270,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                 <div key={item.Id} className={styles.listRow}>
                   <div>
                     <div className={styles.bold}>{item.Title} <span className={styles.miniHint}>ID: {item.Id}</span></div>
-                    <div className={styles.miniHint}>You must approve as: {roles.map(r => r.toUpperCase()).join(', ')}</div>
+                    <div className={styles.miniHint}>You must approve as: {roles.map(r => getRoleDisplayName(r)).join(', ')}</div>
                   </div>
                   <div className={styles.rowBtns}>
                     <button
@@ -5154,7 +5278,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                       className={styles.saveBtn}
                       onClick={async () => {
                         await loadItemIntoForm(item.Id, { signRoles: roles });
-                        showSnack(`Loaded PR #${item.Id} to approve as ${roles.map(r => r.toUpperCase()).join(', ')}`, 'info');
+                        showSnack(`Loaded PR #${item.Id} to approve as ${roles.map(r => getRoleDisplayName(r)).join(', ')}`, 'info');
                       }}
                     >
                       Load to approve
@@ -5184,7 +5308,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                     <div key={r} className={styles.grid3} style={{ alignItems: 'end' }}>
                       <div className={styles.fieldGroup}>
                         <div className={styles.fieldLabel}>Role</div>
-                        <div className={styles.readonlyBox}>{r.toUpperCase()}</div>
+                        <div className={styles.readonlyBox}>{getRoleDisplayName(r)}</div>
                       </div>
                       <div className={styles.fieldGroup}>
                         <button
@@ -5192,7 +5316,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
                           className={styles.saveBtn}
                           onClick={() => handleApprove(r)}
                         >
-                          Agree as {r.toUpperCase()}
+                          Agree as {getRoleDisplayName(r)}
                         </button>
                         <button
                           type="button"
