@@ -29,7 +29,7 @@ import flLogo from '../assets/fl_logo.jpg';
 /* ==================== TIPOS ==================== */
 type Priority = 'Normal' | 'Urgent';
 type RequestType = 'Goods' | 'Services' | 'Software/License';
-type RoleKey = 'requester' | 'supervisor' | 'staffManager' | 'manager' | 'director' | 'vp' | 'cfo' | 'ceo' | 'procurement' | 'finance';
+type RoleKey = 'requester' | 'supervisor' | 'staffManager' | 'staffManager2' | 'manager' | 'manager2' | 'director' | 'vp' | 'cfo' | 'ceo' | 'procurement' | 'finance';
 type ApprovalStatus = 'Agree' | 'Disagree' | 'Pending';
 type BudgetType = 'Budgeted' | 'Non-Budgeted';
 
@@ -60,7 +60,9 @@ interface PRHeader {
 
   supervisor?: IPeoplePickerUserItem | null;
   staffManager?: IPeoplePickerUserItem | null;
+  staffManager2?: IPeoplePickerUserItem | null;
   manager?: IPeoplePickerUserItem | null;
+  manager2?: IPeoplePickerUserItem | null;
   director?: IPeoplePickerUserItem | null;
   vp?: IPeoplePickerUserItem | null;
   cfo?: IPeoplePickerUserItem | null;
@@ -70,7 +72,9 @@ interface PRHeader {
 
   supervisorDate?: string;
   staffManagerDate?: string;
+  staffManager2Date?: string;
   managerDate?: string;
+  manager2Date?: string;
   directorDate?: string;
   vpDate?: string;
   cfoDate?: string;
@@ -80,7 +84,9 @@ interface PRHeader {
 
   supervisorStatus?: ApprovalStatus;
   staffManagerStatus?: ApprovalStatus;
+  staffManager2Status?: ApprovalStatus;
   managerStatus?: ApprovalStatus;
+  manager2Status?: ApprovalStatus;
   directorStatus?: ApprovalStatus;
   vpStatus?: ApprovalStatus;
   cfoStatus?: ApprovalStatus;
@@ -165,7 +171,9 @@ const PERSON_FIELD_INTERNALS: Partial<Record<RoleKey, string>> = {
   requester: 'Requester',
   supervisor: 'Supervisor',
   staffManager: 'StaffManager',
+  staffManager2: 'Staff2',
   manager: 'Manager',
+  manager2: 'Manager2',
   director: 'Director',
   vp: 'VP',
   cfo: 'CFO',
@@ -177,8 +185,10 @@ const PERSON_FIELD_INTERNALS: Partial<Record<RoleKey, string>> = {
 const ROLE_PERSON_TITLE_CANDIDATES: Record<RoleKey, string[]> = {
   requester: ['Requester'],
   supervisor: ['Supervisor'],
-  staffManager: ['Staff Manager'],
+  staffManager: ['Staff Manager', 'Staff'],
+  staffManager2: ['Staff2'],
   manager: ['Manager'],
+  manager2: ['Manager2'],
   director: ['Director'],
   vp: ['VP'],
   cfo: ['CFO'],
@@ -191,7 +201,9 @@ const ROLE_DATE_TITLES: Record<RoleKey, string[]> = {
   requester: [],
   supervisor: ['Supervisor Date'],
   staffManager: ['Staff Manager Date'],
+  staffManager2: ['Staff2 Date'],
   manager: ['Manager Date'],
+  manager2: ['Manager2 Date'],
   director: ['Director Date'],
   vp: ['VP Date'],
   cfo: ['CFO Date'],
@@ -203,7 +215,9 @@ const ROLE_DATE_TITLES: Record<RoleKey, string[]> = {
 const ROLE_STATUS_TITLES: Partial<Record<RoleKey, string[]>> = {
   supervisor: ['Supervisor status', 'Supervisor Status'],
   staffManager: ['Staff Manager status', 'Staff Manager Status'],
+  staffManager2: ['Staff2 status', 'Staff2 Status'],
   manager: ['Manager status', 'Manager Status'],
+  manager2: ['Manager2 status', 'Manager2 Status'],
   director: ['Director status', 'Director Status'],
   vp: ['VP status', 'VP Status'],
   cfo: ['CFO status', 'CFO Status'],
@@ -346,7 +360,9 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     attachSOW: false,
     supervisorStatus: 'Pending',
     staffManagerStatus: 'Pending',
+    staffManager2Status: 'Pending',
     managerStatus: 'Pending',
+    manager2Status: 'Pending',
     directorStatus: 'Pending',
     vpStatus: 'Pending',
     cfoStatus: 'Pending',
@@ -780,8 +796,18 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
 
       if (matches) {
         const position = norm(rule.Position);
-        if (position.includes('staff') && position.includes('manager')) required.push('staffManager');
-        else if (position.includes('manager')) required.push('manager');
+        // Staff/Staff2
+        if (position.includes('staff2')) {
+          required.push('staffManager2');
+        } else if (position.includes('staff') && !position.includes('staff2')) {
+          required.push('staffManager');
+        }
+        // Manager/Manager2
+        if (position.includes('manager2')) {
+          required.push('manager2');
+        } else if (position.includes('manager') && !position.includes('manager2')) {
+          required.push('manager');
+        }
         if (position.includes('director')) required.push('director');
         if (position.includes('vp')) required.push('vp');
         if (position.includes('cfo')) required.push('cfo');
@@ -831,8 +857,10 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   // Mapeo de roles a palabras clave en Position
   const positionKeywords: Record<Exclude<RoleKey, 'requester'>, string[]> = {
     supervisor: ['supervisor'],
-    staffManager: ['staff', 'manager'],
+    staffManager: ['staff'],
+    staffManager2: ['staff'],
     manager: ['manager'],
+    manager2: ['manager'],
     director: ['director'],
     vp: ['vp'],
     cfo: ['cfo'],
@@ -848,10 +876,28 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     const keywords = positionKeywords[role];
     let foundRule: AuthorizationRule | null = null;
 
-    // Buscar la regla que coincida con todas las palabras clave del rol
+    // Buscar la regla que coincida con las palabras clave del rol
     for (const rule of applicableRules) {
       const posNorm = norm(rule.Position);
-      const matches = keywords.every(kw => posNorm.includes(kw));
+      let matches = false;
+
+      // Lógica especial para Staff/Staff2 y Manager/Manager2
+      if (role === 'staffManager') {
+        // Busca "staff" pero NO "staff2"
+        matches = posNorm.includes('staff') && !posNorm.includes('staff2');
+      } else if (role === 'staffManager2') {
+        // Busca específicamente "staff2"
+        matches = posNorm.includes('staff2');
+      } else if (role === 'manager') {
+        // Busca "manager" pero NO "manager2"
+        matches = posNorm.includes('manager') && !posNorm.includes('manager2');
+      } else if (role === 'manager2') {
+        // Busca específicamente "manager2"
+        matches = posNorm.includes('manager2');
+      } else {
+        matches = keywords.every(kw => posNorm.includes(kw));
+      }
+
       if (matches) {
         foundRule = rule;
         break;
@@ -2733,7 +2779,9 @@ const loadMySent = React.useCallback(async () => {
       // ==== Personas (para nombres/emails en "Approvals") ====
       const supP = await getPersonInternalForRole('supervisor');
       const staffManagerP = await getPersonInternalForRole('staffManager');
+      const staffManager2P = await getPersonInternalForRole('staffManager2');
       const managerP = await getPersonInternalForRole('manager');
+      const manager2P = await getPersonInternalForRole('manager2');
       const directorP = await getPersonInternalForRole('director');
       const vpP = await getPersonInternalForRole('vp');
       const cfoP = await getPersonInternalForRole('cfo');
@@ -2744,7 +2792,9 @@ const loadMySent = React.useCallback(async () => {
       const selectParts: string[] = ['Title'];
       if (supP) selectParts.push(`${supP}/Title`, `${supP}/EMail`);
       if (staffManagerP) selectParts.push(`${staffManagerP}/Title`, `${staffManagerP}/EMail`);
+      if (staffManager2P) selectParts.push(`${staffManager2P}/Title`, `${staffManager2P}/EMail`);
       if (managerP) selectParts.push(`${managerP}/Title`, `${managerP}/EMail`);
+      if (manager2P) selectParts.push(`${manager2P}/Title`, `${manager2P}/EMail`);
       if (directorP) selectParts.push(`${directorP}/Title`, `${directorP}/EMail`);
       if (vpP) selectParts.push(`${vpP}/Title`, `${vpP}/EMail`);
       if (cfoP) selectParts.push(`${cfoP}/Title`, `${cfoP}/EMail`);
@@ -2801,7 +2851,9 @@ const loadMySent = React.useCallback(async () => {
         requester: { name: headerDraft.requester?.text, email: headerDraft.requesterEmail || headerDraft.requester?.secondaryText },
         supervisor: { name: supP ? spItem?.[supP]?.Title : undefined, email: supP ? spItem?.[supP]?.EMail : undefined },
         staffManager: { name: staffManagerP ? spItem?.[staffManagerP]?.Title : undefined, email: staffManagerP ? spItem?.[staffManagerP]?.EMail : undefined },
+        staffManager2: { name: staffManager2P ? spItem?.[staffManager2P]?.Title : undefined, email: staffManager2P ? spItem?.[staffManager2P]?.EMail : undefined },
         manager: { name: managerP ? spItem?.[managerP]?.Title : undefined, email: managerP ? spItem?.[managerP]?.EMail : undefined },
+        manager2: { name: manager2P ? spItem?.[manager2P]?.Title : undefined, email: manager2P ? spItem?.[manager2P]?.EMail : undefined },
         director: { name: directorP ? spItem?.[directorP]?.Title : undefined, email: directorP ? spItem?.[directorP]?.EMail : undefined },
         vp: { name: vpP ? spItem?.[vpP]?.Title : undefined, email: vpP ? spItem?.[vpP]?.EMail : undefined },
         cfo: { name: cfoP ? spItem?.[cfoP]?.Title : undefined, email: cfoP ? spItem?.[cfoP]?.EMail : undefined },
@@ -3129,7 +3181,7 @@ const loadMySent = React.useCallback(async () => {
   // PeoplePicker
   const onPicker =
     (k: keyof PRHeader) =>
-      async (items: IPeoplePickerUserItem[]) => {
+      async (items: any[]) => {
         const picked = items?.[0] ?? null;
         setHeaderDraft(prev => ({ ...prev, [k]: picked }));
 
@@ -3242,7 +3294,9 @@ const loadMySent = React.useCallback(async () => {
   const hasPersonAssigned = (r: RoleKey): boolean => {
     switch (r) {
       case 'staffManager': return !!headerDraft.staffManager;
+      case 'staffManager2': return !!headerDraft.staffManager2;
       case 'manager': return !!headerDraft.manager;
+      case 'manager2': return !!headerDraft.manager2;
       case 'director': return !!headerDraft.director;
       case 'vp': return !!headerDraft.vp;
       case 'cfo': return !!headerDraft.cfo;
@@ -4469,6 +4523,78 @@ const loadMySent = React.useCallback(async () => {
               )
             )}
 
+            {/* Staff2 - SOLO SI SE REQUIERE */}
+            {showApprovalFields('staffManager2') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Staff2" person={headerDraft.staffManager2} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Staff2 Date" k="staffManager2Date" />
+                    <div className={styles.fieldGroup}>gulp
+                      <label className={styles.fieldLabel}>Staff2 Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.staffManager2Status || 'Pending'}
+                      </div>
+                    </div>
+                    <div className={styles.fieldGroup} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Staff2</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('staffManager2')}
+                        defaultSelectedUsers={
+                          headerDraft.staffManager2 ? [headerDraft.staffManager2.secondaryText || headerDraft.staffManager2.loginName || headerDraft.staffManager2.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Staff2 Date" k="staffManager2Date" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Staff2 Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.staffManager2Status || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('staffManager2') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('staffManager2')}
+                            >
+                              Agree as Staff2
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('staffManager2')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
+            )}
+
             {/* Manager - SOLO SI SE REQUIERE */}
             {showApprovalFields('manager') && (
               readOnlyMode ? (
@@ -4527,6 +4653,78 @@ const loadMySent = React.useCallback(async () => {
                               className={styles.resetBtn}
                               style={{ marginLeft: 8 }}
                               onClick={() => handleDisagree('manager')}
+                            >
+                              Disagree
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={styles.fieldGroup} />
+                    )}
+                  </div>
+                </>
+              )
+            )}
+
+            {/* Manager2 - SOLO SI SE REQUIERE */}
+            {showApprovalFields('manager2') && (
+              readOnlyMode ? (
+                <>
+                  <PersonView label="Manager2" person={headerDraft.manager2} />
+                  <div className={styles.grid3}>
+                    <DateInput label="Manager2 Date" k="manager2Date" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Manager2 Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.manager2Status || 'Pending'}
+                      </div>
+                    </div>
+                    <div className={styles.fieldGroup} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Manager2</label>
+                    <div className={styles.peoplePicker}>
+                      <PeoplePicker
+                        context={peopleCtx}
+                        personSelectionLimit={1}
+                        ensureUser={true}
+                        showtooltip={true}
+                        principalTypes={[PrincipalType.User]}
+                        onChange={onPicker('manager2')}
+                        defaultSelectedUsers={
+                          headerDraft.manager2 ? [headerDraft.manager2.secondaryText || headerDraft.manager2.loginName || headerDraft.manager2.text].filter(Boolean) as string[] : []
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className={styles.grid3}>
+                    <DateInput label="Manager2 Date" k="manager2Date" />
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Manager2 Status</label>
+                      <div className={styles.readonlyBox}>
+                        {headerDraft.manager2Status || 'Pending'}
+                      </div>
+                    </div>
+                    {readOnlyMode === 'tosign' ? (
+                      <div className={styles.fieldGroup}>
+                        {enableApprover('manager2') && (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.saveBtn}
+                              onClick={() => handleApprove('manager2')}
+                            >
+                              Agree as Manager2
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.resetBtn}
+                              style={{ marginLeft: 8 }}
+                              onClick={() => handleDisagree('manager2')}
                             >
                               Disagree
                             </button>
@@ -5049,7 +5247,9 @@ const loadMySent = React.useCallback(async () => {
     const roleNames: Record<RoleKey, string> = {
       supervisor: 'Supervisor',
       staffManager: 'Staff Manager',
+      staffManager2: 'Staff2 Manager',
       manager: 'Manager',
+      manager2: 'Manager2',
       director: 'Director',
       vp: 'VP',
       cfo: 'CFO',
