@@ -387,8 +387,12 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     approvedRoles: RoleKey[];
     disagreeRoles: RoleKey[];
   }>>([]);
+  const [mySentPage, setMySentPage] = React.useState(1);
+  const MY_SENT_PAGE_SIZE = 10;
   const [myApproved, setMyApproved] = React.useState<any[]>([]);
+  const [myApprovedPage, setMyApprovedPage] = React.useState(1);
   const [myToSign, setMyToSign] = React.useState<Array<{ item: any; roles: RoleKey[] }>>([]);
+  const [myToSignPage, setMyToSignPage] = React.useState(1);
 
   const [listLoading, setListLoading] = React.useState(false);
   const [editingItemId, setEditingItemId] = React.useState<number | null>(null);
@@ -1567,7 +1571,7 @@ const loadMySent = React.useCallback(async () => {
       `?$select=${selectParts.join(',')}` +
       `&$expand=${expandParts.join(',')}` +
       `&$filter=${filter}` +
-      `&$orderby=Created desc&$top=${pageSize ?? 25}`;
+      `&$orderby=Created desc&$top=5000`;
 
     const js = await spGet(url);
     const rawItems = (js.value || js || []) as any[];
@@ -1676,7 +1680,7 @@ const loadMySent = React.useCallback(async () => {
           `?$select=${select.join(',')}` +
           `&$expand=${personInt}` +
           `&$filter=${personInt}/Id eq ${meId}` +
-          `&$orderby=Created desc&$top=${pageSize ?? 50}`;
+          `&$orderby=Created desc&$top=5000`;
         return { role, url, dateInt };
       };
 
@@ -1762,7 +1766,7 @@ const loadMySent = React.useCallback(async () => {
           `?$select=${select.join(',')}` +
           `&$expand=${personInt}` +
           `&$filter=${personInt}/Id eq ${meId}` +
-          `&$orderby=Created desc&$top=${pageSize ?? 50}`;
+          `&$orderby=Created desc&$top=5000`;
         return { role, url, dateInt };
       };
 
@@ -1850,8 +1854,14 @@ const loadMySent = React.useCallback(async () => {
       const staffManagerId = await ensureUserIdSmart(
         H.staffManager?.secondaryText || H.staffManager?.loginName || H.staffManager?.text || null
       );
+      const staffManager2Id = await ensureUserIdSmart(
+        H.staffManager2?.secondaryText || H.staffManager2?.loginName || H.staffManager2?.text || null
+      );
       const managerId = await ensureUserIdSmart(
         H.manager?.secondaryText || H.manager?.loginName || H.manager?.text || null
+      );
+      const manager2Id = await ensureUserIdSmart(
+        H.manager2?.secondaryText || H.manager2?.loginName || H.manager2?.text || null
       );
       const directorId = await ensureUserIdSmart(
         H.director?.secondaryText || H.director?.loginName || H.director?.text || null
@@ -1958,7 +1968,9 @@ const loadMySent = React.useCallback(async () => {
       // Aprobadores
       await trySetUserByRole(dex, 'supervisor', supId, body);
       await trySetUserByRole(dex, 'staffManager', staffManagerId, body);
+      await trySetUserByRole(dex, 'staffManager2', staffManager2Id, body);
       await trySetUserByRole(dex, 'manager', managerId, body);
+      await trySetUserByRole(dex, 'manager2', manager2Id, body);
       await trySetUserByRole(dex, 'director', directorId, body);
       await trySetUserByRole(dex, 'vp', vpId, body);
       await trySetUserByRole(dex, 'cfo', cfoId, body);
@@ -2248,7 +2260,9 @@ const loadMySent = React.useCallback(async () => {
 
       const supId = await ensureUserIdSmart(H.supervisor?.secondaryText || H.supervisor?.loginName || H.supervisor?.text || null);
       const staffManagerId = await ensureUserIdSmart(H.staffManager?.secondaryText || H.staffManager?.loginName || H.staffManager?.text || null);
+      const staffManager2Id = await ensureUserIdSmart(H.staffManager2?.secondaryText || H.staffManager2?.loginName || H.staffManager2?.text || null);
       const managerId = await ensureUserIdSmart(H.manager?.secondaryText || H.manager?.loginName || H.manager?.text || null);
+      const manager2Id = await ensureUserIdSmart(H.manager2?.secondaryText || H.manager2?.loginName || H.manager2?.text || null);
       const directorId = await ensureUserIdSmart(H.director?.secondaryText || H.director?.loginName || H.director?.text || null);
       const vpId = await ensureUserIdSmart(H.vp?.secondaryText || H.vp?.loginName || H.vp?.text || null);
       const cfoId = await ensureUserIdSmart(H.cfo?.secondaryText || H.cfo?.loginName || H.cfo?.text || null);
@@ -2296,7 +2310,9 @@ const loadMySent = React.useCallback(async () => {
       await trySetUserByRole(dex, 'requester', requesterId ?? null, body);
       await trySetUserByRole(dex, 'supervisor', supId, body);
       await trySetUserByRole(dex, 'staffManager', staffManagerId, body);
+      await trySetUserByRole(dex, 'staffManager2', staffManager2Id, body);
       await trySetUserByRole(dex, 'manager', managerId, body);
+      await trySetUserByRole(dex, 'manager2', manager2Id, body);
       await trySetUserByRole(dex, 'director', directorId, body);
       await trySetUserByRole(dex, 'vp', vpId, body);
       await trySetUserByRole(dex, 'cfo', cfoId, body);
@@ -3280,46 +3296,68 @@ const loadMySent = React.useCallback(async () => {
     );
   };
 
+  const mySentPaged = React.useMemo(() => {
+    const start = (mySentPage - 1) * MY_SENT_PAGE_SIZE;
+    return mySentWithStatus.slice(start, start + MY_SENT_PAGE_SIZE);
+  }, [mySentWithStatus, mySentPage]);
+
+  const mySentTotalPages = Math.ceil(mySentWithStatus.length / MY_SENT_PAGE_SIZE);
+
+  const myApprovedPaged = React.useMemo(() => {
+    const start = (myApprovedPage - 1) * MY_SENT_PAGE_SIZE;
+    return myApproved.slice(start, start + MY_SENT_PAGE_SIZE);
+  }, [myApproved, myApprovedPage]);
+
+  const myApprovedTotalPages = Math.ceil(myApproved.length / MY_SENT_PAGE_SIZE);
+
+  const myToSignPaged = React.useMemo(() => {
+    const start = (myToSignPage - 1) * MY_SENT_PAGE_SIZE;
+    return myToSign.slice(start, start + MY_SENT_PAGE_SIZE);
+  }, [myToSign, myToSignPage]);
+
+  const myToSignTotalPages = Math.ceil(myToSign.length / MY_SENT_PAGE_SIZE);
+
   const renderForm = (readOnlyMode: null | 'mysent' | 'tosign') => {
     const roAll = readOnlyMode !== null;
     const isToSign = readOnlyMode === 'tosign';
     const enableApprover = (role: RoleKey) => isToSign && (signFormRoles || []).includes(role);
 
     // Determinar qué campos de aprobación mostrar
-   const showApprovalFields = (role: RoleKey): boolean => {
-  // Siempre mostrar supervisor
-  if (role === 'supervisor') return true;
+    const showApprovalFields = (role: RoleKey): boolean => {
+      // Siempre mostrar supervisor
+      if (role === 'supervisor') return true;
 
-  // Helper: check if role has an assigned person
-  const hasPersonAssigned = (r: RoleKey): boolean => {
-    switch (r) {
-      case 'staffManager': return !!headerDraft.staffManager;
-      case 'staffManager2': return !!headerDraft.staffManager2;
-      case 'manager': return !!headerDraft.manager;
-      case 'manager2': return !!headerDraft.manager2;
-      case 'director': return !!headerDraft.director;
-      case 'vp': return !!headerDraft.vp;
-      case 'cfo': return !!headerDraft.cfo;
-      case 'ceo': return !!headerDraft.ceo;
-      case 'procurement': return !!headerDraft.procurement;
-      case 'finance': return !!headerDraft.finance;
-      default: return false;
-    }
-  };
+      // Helper: check if role has an assigned person
+      const hasPersonAssigned = (r: RoleKey): boolean => {
+        switch (r) {
+          case 'staffManager': return !!headerDraft.staffManager;
+          case 'staffManager2': return !!headerDraft.staffManager2;
+          case 'manager': return !!headerDraft.manager;
+          case 'manager2': return !!headerDraft.manager2;
+          case 'director': return !!headerDraft.director;
+          case 'vp': return !!headerDraft.vp;
+          case 'cfo': return !!headerDraft.cfo;
+          case 'ceo': return !!headerDraft.ceo;
+          case 'procurement': return !!headerDraft.procurement;
+          case 'finance': return !!headerDraft.finance;
+          default: return false;
+        }
+      };
 
-  // Si es modo lectura (mysent / tosign), solo mostrar roles con persona asignada
-  if (roAll) return hasPersonAssigned(role);
-  
-  // Si estamos en modo nuevo, mostrar solo los requeridos
-  if (!editingItemId) {
-    const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
-    const requiredRoles = getRequiredAuthorizers(headerDraft.area || '', headerDraft.budgetType || 'Budgeted', totalAmount);
-    return requiredRoles.includes(role);
-  }
-  
-  // Si estamos editando, mostrar el campo si ya tiene un valor asignado
-  return hasPersonAssigned(role);
-};
+      // Si es modo lectura (mysent / tosign), solo mostrar roles con persona asignada
+      if (roAll) return hasPersonAssigned(role);
+      
+      // Si estamos en modo nuevo, mostrar solo los requeridos
+      if (!editingItemId) {
+        const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
+        const requiredRoles = getRequiredAuthorizers(headerDraft.area || '', headerDraft.budgetType || 'Budgeted', totalAmount);
+        return requiredRoles.includes(role);
+      }
+      
+      // Si estamos editando, mostrar el campo si ya tiene un valor asignado
+      return hasPersonAssigned(role);
+    };
+
     return (
       <>
         {readOnlyMode === null && isLocked && (
@@ -4531,7 +4569,7 @@ const loadMySent = React.useCallback(async () => {
                   <div className={styles.grid3}>
                     <DateInput label="Staff2 Date" k="staffManager2Date" />
                     <div className={styles.fieldGroup}>gulp
-                      <label className={styles.fieldLabel}>Staff2 Status</label>
+                      <label className={styles.fieldLabel}>Staff Status</label>
                       <div className={styles.readonlyBox}>
                         {headerDraft.staffManager2Status || 'Pending'}
                       </div>
@@ -4542,7 +4580,7 @@ const loadMySent = React.useCallback(async () => {
               ) : (
                 <>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Staff2</label>
+                    <label className={styles.fieldLabel}>Staff</label>
                     <div className={styles.peoplePicker}>
                       <PeoplePicker
                         context={peopleCtx}
@@ -4560,7 +4598,7 @@ const loadMySent = React.useCallback(async () => {
                   <div className={styles.grid3}>
                     <DateInput label="Staff2 Date" k="staffManager2Date" />
                     <div className={styles.fieldGroup}>
-                      <label className={styles.fieldLabel}>Staff2 Status</label>
+                      <label className={styles.fieldLabel}>Staff Status</label>
                       <div className={styles.readonlyBox}>
                         {headerDraft.staffManager2Status || 'Pending'}
                       </div>
@@ -4574,7 +4612,7 @@ const loadMySent = React.useCallback(async () => {
                               className={styles.saveBtn}
                               onClick={() => handleApprove('staffManager2')}
                             >
-                              Agree as Staff2
+                              Agree as Staff
                             </button>
                             <button
                               type="button"
@@ -4675,7 +4713,7 @@ const loadMySent = React.useCallback(async () => {
                   <div className={styles.grid3}>
                     <DateInput label="Manager2 Date" k="manager2Date" />
                     <div className={styles.fieldGroup}>
-                      <label className={styles.fieldLabel}>Manager2 Status</label>
+                      <label className={styles.fieldLabel}>Manager Status</label>
                       <div className={styles.readonlyBox}>
                         {headerDraft.manager2Status || 'Pending'}
                       </div>
@@ -4686,7 +4724,7 @@ const loadMySent = React.useCallback(async () => {
               ) : (
                 <>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Manager2</label>
+                    <label className={styles.fieldLabel}>Manager</label>
                     <div className={styles.peoplePicker}>
                       <PeoplePicker
                         context={peopleCtx}
@@ -4704,7 +4742,7 @@ const loadMySent = React.useCallback(async () => {
                   <div className={styles.grid3}>
                     <DateInput label="Manager2 Date" k="manager2Date" />
                     <div className={styles.fieldGroup}>
-                      <label className={styles.fieldLabel}>Manager2 Status</label>
+                      <label className={styles.fieldLabel}>Manager Status</label>
                       <div className={styles.readonlyBox}>
                         {headerDraft.manager2Status || 'Pending'}
                       </div>
@@ -4718,7 +4756,7 @@ const loadMySent = React.useCallback(async () => {
                               className={styles.saveBtn}
                               onClick={() => handleApprove('manager2')}
                             >
-                              Agree as Manager2
+                              Agree as Manager
                             </button>
                             <button
                               type="button"
@@ -5224,7 +5262,6 @@ const loadMySent = React.useCallback(async () => {
     );
   };
 
-  // Estados para controlar si las listas están expandidas o colapsadas
   const [expandedLists, setExpandedLists] = React.useState<{
     mysent: boolean;
     tosign: boolean;
@@ -5242,7 +5279,6 @@ const loadMySent = React.useCallback(async () => {
     }));
   };
 
-  // Función para obtener el nombre legible del rol
   const getRoleDisplayName = (role: RoleKey): string => {
     const roleNames: Record<RoleKey, string> = {
       supervisor: 'Supervisor',
@@ -5327,67 +5363,95 @@ const loadMySent = React.useCallback(async () => {
                 {expandedLists.mysent ? '▲ Collapse' : '▼ Expand'} List ({mySentWithStatus.length} items)
               </button>
               
-              {expandedLists.mysent && mySentWithStatus.map(({ item, pendingRoles, approvedRoles, disagreeRoles }) => (
-                <div key={item.Id} className={styles.listRow}>
-                  <div style={{ flex: 1 }}>
-                    <div className={styles.bold}>
-                      {item.Title}
-                      <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>
-                        (Pending: {pendingRoles.length} roles)
-                      </span>
+              {expandedLists.mysent && (
+                <>
+                  {mySentTotalPages > 1 && (
+                    <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setMySentPage(p => Math.max(1, p - 1))}
+                        disabled={mySentPage === 1}
+                        className={styles.saveBtn}
+                        style={{ padding: '4px 12px', fontSize: '12px' }}
+                      >
+                        ← Prev
+                      </button>
+                      <span style={{ fontSize: '12px' }}>Page {mySentPage} of {mySentTotalPages}</span>
+                      <button
+                        type="button"
+                        onClick={() => setMySentPage(p => Math.min(mySentTotalPages, p + 1))}
+                        disabled={mySentPage === mySentTotalPages}
+                        className={styles.saveBtn}
+                        style={{ padding: '4px 12px', fontSize: '12px' }}
+                      >
+                        Next →
+                      </button>
                     </div>
-                    <div className={styles.miniHint}>ID: {item.Id} • {item.Created}</div>
-                    
-                    {/* Mostrar estado de aprobación */}
-                    <div style={{ marginTop: '8px' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {pendingRoles.map(role => (
-                          <span
-                            key={role}
-                            style={{
-                              backgroundColor: '#fff3cd',
-                              color: '#856404',
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              border: '1px solid #ffeaa7'
-                            }}
-                          >
-                            Pending: {getRoleDisplayName(role)}
+                  )}
+                  
+                  {mySentPaged.map(({ item, pendingRoles, approvedRoles, disagreeRoles }) => (
+                    <div key={item.Id} className={styles.listRow}>
+                      <div style={{ flex: 1 }}>
+                        <div className={styles.bold}>
+                          {item.Title}
+                          <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>
+                            (Pending: {pendingRoles.length} roles)
                           </span>
-                        ))}
-                        {approvedRoles.map(role => (
-                          <span
-                            key={role}
-                            style={{
-                              backgroundColor: '#d4edda',
-                              color: '#155724',
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              border: '1px solid #c3e6cb'
-                            }}
-                          >
-                            Approved: {getRoleDisplayName(role)}
-                          </span>
-                        ))}
+                        </div>
+                        <div className={styles.miniHint}>ID: {item.Id} • {item.Created}</div>
+                        
+                        {/* Mostrar estado de aprobación */}
+                        <div style={{ marginTop: '8px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {pendingRoles.map(role => (
+                              <span
+                                key={role}
+                                style={{
+                                  backgroundColor: '#fff3cd',
+                                  color: '#856404',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '12px',
+                                  border: '1px solid #ffeaa7'
+                                }}
+                              >
+                                Pending: {getRoleDisplayName(role)}
+                              </span>
+                            ))}
+                            {approvedRoles.map(role => (
+                              <span
+                                key={role}
+                                style={{
+                                  backgroundColor: '#d4edda',
+                                  color: '#155724',
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '12px',
+                                  border: '1px solid #c3e6cb'
+                                }}
+                              >
+                                Approved: {getRoleDisplayName(role)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className={styles.rowBtns}>
+                        <button
+                          type="button"
+                          className={styles.saveBtn}
+                          onClick={async () => {
+                            await loadItemIntoForm(item.Id);
+                            showSnack(`Loaded PR #${item.Id} for view/edit`, 'info');
+                          }}
+                        >
+                          Load & Edit
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  <div className={styles.rowBtns}>
-                    <button
-                      type="button"
-                      className={styles.saveBtn}
-                      onClick={async () => {
-                        await loadItemIntoForm(item.Id);
-                        showSnack(`Loaded PR #${item.Id} for view/edit`, 'info');
-                      }}
-                    >
-                      Load & Edit
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  ))}
+                </>
+              )}
             </Section>
 
             {editingItemId && (
@@ -5413,34 +5477,62 @@ const loadMySent = React.useCallback(async () => {
                 {expandedLists.approved ? '▲ Collapse' : '▼ Expand'} List ({myApproved.length} items)
               </button>
               
-              {expandedLists.approved && myApproved.map(it => (
-                <div key={it.Id} className={styles.listRow}>
-                  <div>
-                    <div className={styles.bold}>{it.Title}</div>
-                    <div className={styles.miniHint}>ID: {it.Id} • {it.Created}</div>
-                  </div>
-                  <div className={styles.rowBtns}>
-                    <button
-                      type="button"
-                      className={styles.saveBtn}
-                      onClick={async () => {
-                        await loadItemIntoForm(it.Id);
-                        showSnack(`Loaded PR #${it.Id}`, 'info');
-                      }}
-                    >
-                      Load & View
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.resetBtn} ${pdfLoading ? styles.btnLoading : ''}`}
-                      onClick={() => handleGeneratePdf(it)}
-                      disabled={pdfLoading}
-                    >
-                      {pdfLoading ? 'Generating...' : 'Generate PDF'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+              {expandedLists.approved && (
+                <>
+                  {myApprovedTotalPages > 1 && (
+                    <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setMyApprovedPage(p => Math.max(1, p - 1))}
+                        disabled={myApprovedPage === 1}
+                        className={styles.saveBtn}
+                        style={{ padding: '4px 12px', fontSize: '12px' }}
+                      >
+                        ← Prev
+                      </button>
+                      <span style={{ fontSize: '12px' }}>Page {myApprovedPage} of {myApprovedTotalPages}</span>
+                      <button
+                        type="button"
+                        onClick={() => setMyApprovedPage(p => Math.min(myApprovedTotalPages, p + 1))}
+                        disabled={myApprovedPage === myApprovedTotalPages}
+                        className={styles.saveBtn}
+                        style={{ padding: '4px 12px', fontSize: '12px' }}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                  
+                  {myApprovedPaged.map(it => (
+                    <div key={it.Id} className={styles.listRow}>
+                      <div>
+                        <div className={styles.bold}>{it.Title}</div>
+                        <div className={styles.miniHint}>ID: {it.Id} • {it.Created}</div>
+                      </div>
+                      <div className={styles.rowBtns}>
+                        <button
+                          type="button"
+                          className={styles.saveBtn}
+                          onClick={async () => {
+                            await loadItemIntoForm(it.Id);
+                            showSnack(`Loaded PR #${it.Id}`, 'info');
+                          }}
+                        >
+                          Load & View
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.resetBtn} ${pdfLoading ? styles.btnLoading : ''}`}
+                          onClick={() => handleGeneratePdf(it)}
+                          disabled={pdfLoading}
+                        >
+                          {pdfLoading ? 'Generating...' : 'Generate PDF'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </Section>
 
             {editingItemId && (
@@ -5466,26 +5558,54 @@ const loadMySent = React.useCallback(async () => {
                 {expandedLists.tosign ? '▲ Collapse' : '▼ Expand'} List ({myToSign.length} items)
               </button>
               
-              {expandedLists.tosign && myToSign.map(({ item, roles }) => (
-                <div key={item.Id} className={styles.listRow}>
-                  <div>
-                    <div className={styles.bold}>{item.Title} <span className={styles.miniHint}>ID: {item.Id}</span></div>
-                    <div className={styles.miniHint}>You must approve as: {roles.map(r => getRoleDisplayName(r)).join(', ')}</div>
-                  </div>
-                  <div className={styles.rowBtns}>
-                    <button
-                      type="button"
-                      className={styles.saveBtn}
-                      onClick={async () => {
-                        await loadItemIntoForm(item.Id, { signRoles: roles });
-                        showSnack(`Loaded PR #${item.Id} to approve as ${roles.map(r => getRoleDisplayName(r)).join(', ')}`, 'info');
-                      }}
-                    >
-                      Load to approve
-                    </button>
-                  </div>
-                </div>
-              ))}
+              {expandedLists.tosign && (
+                <>
+                  {myToSignTotalPages > 1 && (
+                    <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setMyToSignPage(p => Math.max(1, p - 1))}
+                        disabled={myToSignPage === 1}
+                        className={styles.saveBtn}
+                        style={{ padding: '4px 12px', fontSize: '12px' }}
+                      >
+                        ← Prev
+                      </button>
+                      <span style={{ fontSize: '12px' }}>Page {myToSignPage} of {myToSignTotalPages}</span>
+                      <button
+                        type="button"
+                        onClick={() => setMyToSignPage(p => Math.min(myToSignTotalPages, p + 1))}
+                        disabled={myToSignPage === myToSignTotalPages}
+                        className={styles.saveBtn}
+                        style={{ padding: '4px 12px', fontSize: '12px' }}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                  
+                  {myToSignPaged.map(({ item, roles }) => (
+                    <div key={item.Id} className={styles.listRow}>
+                      <div>
+                        <div className={styles.bold}>{item.Title} <span className={styles.miniHint}>ID: {item.Id}</span></div>
+                        <div className={styles.miniHint}>You must approve as: {roles.map(r => getRoleDisplayName(r)).join(', ')}</div>
+                      </div>
+                      <div className={styles.rowBtns}>
+                        <button
+                          type="button"
+                          className={styles.saveBtn}
+                          onClick={async () => {
+                            await loadItemIntoForm(item.Id, { signRoles: roles });
+                            showSnack(`Loaded PR #${item.Id} to approve as ${roles.map(r => getRoleDisplayName(r)).join(', ')}`, 'info');
+                          }}
+                        >
+                          Load to approve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </Section>
 
             {editingItemId && signFormRoles && signFormRoles.length > 0 && (
