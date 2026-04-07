@@ -249,7 +249,7 @@ const AREA_OPTIONS = [
   'Geology',
   'Environment',
   'Finance',
-  'Corporate Development',
+  'Investor Relations',
   'Technology'
 ];
 
@@ -557,6 +557,86 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       throw new Error(last || 'GET failed');
     },
     [context.spHttpClient]
+  );
+
+  const loadRoleStatesForItems = React.useCallback(
+    async (
+      itemIds: number[],
+      dex: { byTitle: Map<string, FieldInfo>, byInternal: Map<string, FieldInfo> }
+    ): Promise<Record<number, Partial<Record<RoleKey, {
+      hasPersonAssigned: boolean;
+      hasDate: boolean;
+      status?: ApprovalStatus | string;
+    }>>>> => {
+      const result: Record<number, Partial<Record<RoleKey, {
+        hasPersonAssigned: boolean;
+        hasDate: boolean;
+        status?: ApprovalStatus | string;
+      }>>> = {};
+
+      if (!parentRef || !itemIds.length) return result;
+
+      const allRoles: RoleKey[] = [
+        'supervisor',
+        'staffManager',
+        'staffManager2',
+        'manager',
+        'manager2',
+        'director',
+        'vp',
+        'cfo',
+        'ceo',
+        'procurement',
+        'finance'
+      ];
+
+      const idFilter = itemIds.map(id => `Id eq ${id}`).join(' or ');
+
+      for (const role of allRoles) {
+        const personInt = nameOfFirstExisting(dex, ROLE_PERSON_TITLE_CANDIDATES[role]);
+        const dateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES[role]);
+        const statusInt = nameOfFirstExisting(dex, ROLE_STATUS_TITLES[role] || []);
+
+        if (!personInt) continue;
+
+        const selectParts = ['Id', `${personInt}/Id`, `${personInt}/Title`];
+        if (dateInt) selectParts.push(dateInt);
+        if (statusInt) selectParts.push(statusInt);
+
+        const url =
+          `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items` +
+          `?$select=${selectParts.join(',')}` +
+          `&$expand=${personInt}` +
+          `&$filter=(${idFilter})`;
+
+        try {
+          const js = await spGet(url);
+          const items = (js.value || js || []) as any[];
+
+          for (const it of items) {
+            const personVal = it[personInt] || it[`${personInt}Id`];
+            const hasPersonAssigned =
+              personVal != null &&
+              personVal !== 0 &&
+              personVal !== '' &&
+              !(typeof personVal === 'object' && personVal.Id == null);
+
+            if (!result[it.Id]) result[it.Id] = {};
+
+            result[it.Id]![role] = {
+              hasPersonAssigned,
+              hasDate: !!(dateInt && it[dateInt]),
+              status: statusInt ? it[statusInt] : undefined
+            };
+          }
+        } catch (err) {
+          console.warn(`Failed loading role state for ${role}`, err);
+        }
+      }
+
+      return result;
+    },
+    [parentRef, siteUrl, spGet, parentListEscName]
   );
 
   const getFormDigest = async (): Promise<string> => {
@@ -934,10 +1014,10 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       setLoadingGlCodes(true);
       let url: string;
       if (glCodesListId) {
-        url = `${siteUrl}/_api/web/lists(guid'${glCodesListId}')/items?$select=Title,CostCenterName,CostCenterNumber,ActivityCodeName,ActivityCodeNumber,NaturalAccountName,NaturalAccountNumber,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists(guid'${glCodesListId}')/items?$select=Title,CostCenterName,CostCenterNumber,ActivityCodeName,ActivityCodeNumber,NaturalAccountName,NaturalAccountNumber,IsActive&$filter=IsActive eq true&$orderby=Title asc&$top=5000`;
       } else {
         const listEscaped = glCodesListTitle!.replace(/'/g, "''");
-        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Title,CostCenterName,CostCenterNumber,ActivityCodeName,ActivityCodeNumber,NaturalAccountName,NaturalAccountNumber,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Title,CostCenterName,CostCenterNumber,ActivityCodeName,ActivityCodeNumber,NaturalAccountName,NaturalAccountNumber,IsActive&$filter=IsActive eq true&$orderby=Title asc&$top=5000`;
       }
       const js = await spGet(url);
       const items = ((js as any).value || js || []) as GLCodeItem[];
@@ -956,10 +1036,10 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       setLoadingProjects(true);
       let url: string;
       if (projectsListId) {
-        url = `${siteUrl}/_api/web/lists(guid'${projectsListId}')/items?$select=Title,ProjectCode,ProjectDescription,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists(guid'${projectsListId}')/items?$select=Title,ProjectCode,ProjectDescription,IsActive&$filter=IsActive eq true&$orderby=Title asc&$top=5000`;
       } else {
         const listEscaped = projectsListTitle!.replace(/'/g, "''");
-        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Title,ProjectCode,ProjectDescription,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Title,ProjectCode,ProjectDescription,IsActive&$filter=IsActive eq true&$orderby=Title asc&$top=5000`;
       }
       const js = await spGet(url);
       const items = ((js as any).value || js || []) as ProjectItem[];
@@ -978,10 +1058,10 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       setLoadingCompanies(true);
       let url: string;
       if (companiesListId) {
-        url = `${siteUrl}/_api/web/lists(guid'${companiesListId}')/items?$select=Id,Title,CompanyCodeforGLAccounts,ProntoCompanyName,CompanyName,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists(guid'${companiesListId}')/items?$select=Id,Title,CompanyCodeforGLAccounts,ProntoCompanyName,CompanyName,IsActive&$filter=IsActive eq true&$orderby=Title asc&$top=5000`;
       } else {
         const listEscaped = companiesListTitle!.replace(/'/g, "''");
-        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Id,Title,CompanyCodeforGLAccounts,ProntoCompanyName,CompanyName,IsActive&$filter=IsActive eq true&$orderby=Title asc`;
+        url = `${siteUrl}/_api/web/lists/getByTitle('${listEscaped}')/items?$select=Id,Title,CompanyCodeforGLAccounts,ProntoCompanyName,CompanyName,IsActive&$filter=IsActive eq true&$orderby=Title asc&$top=5000`;
       }
       const js = await spGet(url);
       const items = ((js as any).value || js || []) as CompanyItem[];
@@ -1523,6 +1603,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   /* =================== Loads =================== */
 const loadMySent = React.useCallback(async () => {
   if (!parentRef || !currentUserIdRef.current) return;
+
   setListLoading(true);
   try {
     const dex = await getParentFieldIndex();
@@ -1530,40 +1611,14 @@ const loadMySent = React.useCallback(async () => {
     const meId = currentUserIdRef.current!;
     const requesterInt = nf('Requester');
 
-    const selectParts = [`Id`, `Title`, `Created`, `Author/Id`, `Author/Title`, `Author/EMail`];
-    const expandParts = [`Author`];
+    const selectParts = ['Id', 'Title', 'Created', 'Author/Id', 'Author/Title', 'Author/EMail'];
+    const expandParts = ['Author'];
 
     let filter = `Author/Id eq ${meId}`;
     if (requesterInt) {
       selectParts.push(`${requesterInt}/Id`, `${requesterInt}/Title`);
       expandParts.push(requesterInt);
       filter = `(${requesterInt}/Id eq ${meId} or Author/Id eq ${meId})`;
-    }
-
-    // Precompute internal field names for all roles
-    const allRoles: RoleKey[] = ['supervisor', 'staffManager', 'manager', 'director', 'vp', 'cfo', 'ceo', 'procurement', 'finance'];
-
-    const roleFieldMap: Record<string, {
-      personInt: string | null;
-      dateInt: string | null;
-      statusInt: string | null;
-    }> = {};
-
-    for (const role of allRoles) {
-      const personInt = nameOfFirstExisting(dex, ROLE_PERSON_TITLE_CANDIDATES[role]);
-      const dateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES[role]);
-      const statusInt = nameOfFirstExisting(dex, ROLE_STATUS_TITLES[role] || []);
-
-      roleFieldMap[role] = { personInt, dateInt, statusInt };
-
-      // Add person field to $select/$expand
-      if (personInt) {
-        selectParts.push(`${personInt}/Id`, `${personInt}/Title`);
-        if (!expandParts.includes(personInt)) expandParts.push(personInt);
-      }
-      // Add date and status fields to $select
-      if (dateInt) selectParts.push(dateInt);
-      if (statusInt) selectParts.push(statusInt);
     }
 
     const url =
@@ -1576,64 +1631,61 @@ const loadMySent = React.useCallback(async () => {
     const js = await spGet(url);
     const rawItems = (js.value || js || []) as any[];
 
-    const itemsWithStatus: Array<{
-      item: any;
-      pendingRoles: RoleKey[];
-      approvedRoles: RoleKey[];
-      disagreeRoles: RoleKey[];
-    }> = [];
+    if (!rawItems.length) {
+      setMySent([]);
+      setMySentWithStatus([]);
+      return;
+    }
 
-    for (const item of rawItems) {
+    const itemIds = rawItems.map(i => i.Id as number);
+    const roleStates = await loadRoleStatesForItems(itemIds, dex);
+
+    const allRoles: RoleKey[] = [
+      'supervisor',
+      'staffManager',
+      'staffManager2',
+      'manager',
+      'manager2',
+      'director',
+      'vp',
+      'cfo',
+      'ceo',
+      'procurement',
+      'finance'
+    ];
+
+    const itemsWithStatus = rawItems.map(item => {
       const pendingRoles: RoleKey[] = [];
       const approvedRoles: RoleKey[] = [];
       const disagreeRoles: RoleKey[] = [];
 
+      const stateByRole = roleStates[item.Id] || {};
+
       for (const role of allRoles) {
-        const { personInt, dateInt, statusInt } = roleFieldMap[role];
+        const state = stateByRole[role];
+        if (!state?.hasPersonAssigned) continue;
 
-        // ✅ Skip roles that have NO person assigned
-        if (!personInt) continue;
-        const personVal = item[personInt] || item[`${personInt}Id`];
-        const hasPersonAssigned = personVal != null
-          && personVal !== 0
-          && personVal !== ''
-          && !(typeof personVal === 'object' && personVal.Id == null);
-        if (!hasPersonAssigned) continue;
-
-        // Classify based on date and status
-        const hasDate = dateInt && item[dateInt];
-        const statusVal = statusInt ? item[statusInt] : undefined;
-
-        if (hasDate) {
-          if (statusVal === 'Agree') {
-            approvedRoles.push(role);
-          } else if (statusVal === 'Disagree') {
-            disagreeRoles.push(role);
-          } else {
-            approvedRoles.push(role);
-          }
+        if (state.status === 'Disagree') {
+          disagreeRoles.push(role);
+        } else if (state.status === 'Agree' || state.hasDate) {
+          approvedRoles.push(role);
         } else {
-          if (statusVal === 'Agree') {
-            approvedRoles.push(role);
-          } else if (statusVal === 'Disagree') {
-            disagreeRoles.push(role);
-          } else {
-            pendingRoles.push(role);
-          }
+          pendingRoles.push(role);
         }
       }
 
-      itemsWithStatus.push({
+      return {
         item,
         pendingRoles,
         approvedRoles,
         disagreeRoles
-      });
-    }
+      };
+    });
 
-    setMySentWithStatus(itemsWithStatus);
     setMySent(rawItems);
-  } catch {
+    setMySentWithStatus(itemsWithStatus);
+  } catch (err) {
+    console.error('Error in loadMySent:', err);
     setMySent([]);
     setMySentWithStatus([]);
   } finally {
@@ -1651,7 +1703,9 @@ const loadMySent = React.useCallback(async () => {
       const dex = await getParentFieldIndex();
       const supInt = await getPersonInternalForRole('supervisor');
       const staffManagerInt = await getPersonInternalForRole('staffManager');
+      const staffManager2Int = await getPersonInternalForRole('staffManager2');
       const managerInt = await getPersonInternalForRole('manager');
+      const manager2Int = await getPersonInternalForRole('manager2');
       const directorInt = await getPersonInternalForRole('director');
       const vpInt = await getPersonInternalForRole('vp');
       const cfoInt = await getPersonInternalForRole('cfo');
@@ -1661,7 +1715,9 @@ const loadMySent = React.useCallback(async () => {
 
       const supDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.supervisor);
       const staffManagerDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.staffManager);
+      const staffManager2DateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.staffManager2);
       const managerDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.manager);
+      const manager2DateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.manager2);
       const directorDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.director);
       const vpDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.vp);
       const cfoDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.cfo);
@@ -1687,7 +1743,9 @@ const loadMySent = React.useCallback(async () => {
       const queries = [
         makeQ('supervisor', supInt, supDateInt),
         makeQ('staffManager', staffManagerInt, staffManagerDateInt),
+        makeQ('staffManager2', staffManager2Int, staffManager2DateInt),
         makeQ('manager', managerInt, managerDateInt),
+        makeQ('manager2', manager2Int, manager2DateInt),
         makeQ('director', directorInt, directorDateInt),
         makeQ('vp', vpInt, vpDateInt),
         makeQ('cfo', cfoInt, cfoDateInt),
@@ -1737,7 +1795,9 @@ const loadMySent = React.useCallback(async () => {
       const dex = await getParentFieldIndex();
       const supInt = await getPersonInternalForRole('supervisor');
       const staffManagerInt = await getPersonInternalForRole('staffManager');
+      const staffManager2Int = await getPersonInternalForRole('staffManager2');
       const managerInt = await getPersonInternalForRole('manager');
+      const manager2Int = await getPersonInternalForRole('manager2');
       const directorInt = await getPersonInternalForRole('director');
       const vpInt = await getPersonInternalForRole('vp');
       const cfoInt = await getPersonInternalForRole('cfo');
@@ -1747,7 +1807,9 @@ const loadMySent = React.useCallback(async () => {
 
       const supDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.supervisor);
       const staffManagerDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.staffManager);
+      const staffManager2DateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.staffManager2);
       const managerDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.manager);
+      const manager2DateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.manager2);
       const directorDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.director);
       const vpDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.vp);
       const cfoDateInt = nameOfFirstExisting(dex, ROLE_DATE_TITLES.cfo);
@@ -1773,7 +1835,9 @@ const loadMySent = React.useCallback(async () => {
       const queries = [
         makeQ('supervisor', supInt, supDateInt),
         makeQ('staffManager', staffManagerInt, staffManagerDateInt),
+        makeQ('staffManager2', staffManager2Int, staffManager2DateInt),
         makeQ('manager', managerInt, managerDateInt),
+        makeQ('manager2', manager2Int, manager2DateInt),
         makeQ('director', directorInt, directorDateInt),
         makeQ('vp', vpInt, vpDateInt),
         makeQ('cfo', cfoInt, cfoDateInt),
@@ -2778,7 +2842,9 @@ const loadMySent = React.useCallback(async () => {
       const nf = buildNameOfField(dex);
       const supStatusInt = nf('Supervisor status');
       const staffManagerStatusInt = nf('Staff Manager status');
+      const staffManager2StatusInt = nf('Staff2 status');
       const managerStatusInt = nf('Manager status');
+      const manager2StatusInt = nf('Manager2 status');
       const directorStatusInt = nf('Director status');
       const vpStatusInt = nf('VP status');
       const cfoStatusInt = nf('CFO status');
@@ -2805,78 +2871,69 @@ const loadMySent = React.useCallback(async () => {
       const procurementP = await getPersonInternalForRole('procurement');
       const financeP = await getPersonInternalForRole('finance');
 
-      const selectParts: string[] = ['Title'];
-      if (supP) selectParts.push(`${supP}/Title`, `${supP}/EMail`);
-      if (staffManagerP) selectParts.push(`${staffManagerP}/Title`, `${staffManagerP}/EMail`);
-      if (staffManager2P) selectParts.push(`${staffManager2P}/Title`, `${staffManager2P}/EMail`);
-      if (managerP) selectParts.push(`${managerP}/Title`, `${managerP}/EMail`);
-      if (manager2P) selectParts.push(`${manager2P}/Title`, `${manager2P}/EMail`);
-      if (directorP) selectParts.push(`${directorP}/Title`, `${directorP}/EMail`);
-      if (vpP) selectParts.push(`${vpP}/Title`, `${vpP}/EMail`);
-      if (cfoP) selectParts.push(`${cfoP}/Title`, `${cfoP}/EMail`);
-      if (ceoP) selectParts.push(`${ceoP}/Title`, `${ceoP}/EMail`);
-      if (procurementP) selectParts.push(`${procurementP}/Title`, `${procurementP}/EMail`);
-      if (financeP) selectParts.push(`${financeP}/Title`, `${financeP}/EMail`);
-      if (supStatusInt) selectParts.push(supStatusInt);
-      if (staffManagerStatusInt) selectParts.push(staffManagerStatusInt);
-      if (managerStatusInt) selectParts.push(managerStatusInt);
-      if (directorStatusInt) selectParts.push(directorStatusInt);
-      if (vpStatusInt) selectParts.push(vpStatusInt);
-      if (cfoStatusInt) selectParts.push(cfoStatusInt);
-      if (ceoStatusInt) selectParts.push(ceoStatusInt);
-      if (procurementStatusInt) selectParts.push(procurementStatusInt);
-      if (financeStatusInt) selectParts.push(financeStatusInt);
+      const approverInfo: Record<RoleKey, { name?: string; email?: string; status?: string }> = {
+        requester: { name: headerDraft.requester?.text, email: headerDraft.requesterEmail || headerDraft.requester?.secondaryText },
+        supervisor: { name: undefined, email: undefined, status: undefined },
+        staffManager: { name: undefined, email: undefined, status: undefined },
+        staffManager2: { name: undefined, email: undefined, status: undefined },
+        manager: { name: undefined, email: undefined, status: undefined },
+        manager2: { name: undefined, email: undefined, status: undefined },
+        director: { name: undefined, email: undefined, status: undefined },
+        vp: { name: undefined, email: undefined, status: undefined },
+        cfo: { name: undefined, email: undefined, status: undefined },
+        ceo: { name: undefined, email: undefined, status: undefined },
+        procurement: { name: undefined, email: undefined, status: undefined },
+        finance: { name: undefined, email: undefined, status: undefined }
+      };
 
-      const expandParts = [supP, staffManagerP, managerP, directorP, vpP, cfoP, ceoP, procurementP, financeP].filter(Boolean) as string[];
+      const roleQueries: Array<{ role: RoleKey; personInt?: string | null; statusInt?: string | null }> = [
+        { role: 'supervisor', personInt: supP, statusInt: supStatusInt },
+        { role: 'staffManager', personInt: staffManagerP, statusInt: staffManagerStatusInt },
+        { role: 'staffManager2', personInt: staffManager2P, statusInt: staffManager2StatusInt || undefined },
+        { role: 'manager', personInt: managerP, statusInt: managerStatusInt },
+        { role: 'manager2', personInt: manager2P, statusInt: manager2StatusInt || undefined },
+        { role: 'director', personInt: directorP, statusInt: directorStatusInt },
+        { role: 'vp', personInt: vpP, statusInt: vpStatusInt },
+        { role: 'cfo', personInt: cfoP, statusInt: cfoStatusInt },
+        { role: 'ceo', personInt: ceoP, statusInt: ceoStatusInt },
+        { role: 'procurement', personInt: procurementP, statusInt: procurementStatusInt },
+        { role: 'finance', personInt: financeP, statusInt: financeStatusInt }
+      ];
 
-      const parentItemUrl =
-        `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items(${itemId})` +
-        `?$select=${selectParts.join(',')}` +
-        (expandParts.length ? `&$expand=${expandParts.join(',')}` : ``);
+      const allRolesAgree = await Promise.all(roleQueries.map(async ({ role, personInt, statusInt }) => {
+        if (!personInt) return { role, hasPerson: false, status: undefined, name: undefined, email: undefined };
 
-      const spItem = await spGet(parentItemUrl);
+        const selectParts = ['Id'];
+        if (statusInt) selectParts.push(statusInt);
+        if (personInt) selectParts.push(`${personInt}/Title`, `${personInt}/EMail`);
 
-      const supStatusVal: string | undefined = supStatusInt ? spItem?.[supStatusInt] : undefined;
-      const staffManagerStatusVal: string | undefined = staffManagerStatusInt ? spItem?.[staffManagerStatusInt] : undefined;
-      const managerStatusVal: string | undefined = managerStatusInt ? spItem?.[managerStatusInt] : undefined;
-      const directorStatusVal: string | undefined = directorStatusInt ? spItem?.[directorStatusInt] : undefined;
-      const vpStatusVal: string | undefined = vpStatusInt ? spItem?.[vpStatusInt] : undefined;
-      const cfoStatusVal: string | undefined = cfoStatusInt ? spItem?.[cfoStatusInt] : undefined;
-      const ceoStatusVal: string | undefined = ceoStatusInt ? spItem?.[ceoStatusInt] : undefined;
-      const procurementStatusVal: string | undefined = procurementStatusInt ? spItem?.[procurementStatusInt] : undefined;
-      const financeStatusVal: string | undefined = financeStatusInt ? spItem?.[financeStatusInt] : undefined;
+        const expandParts = personInt ? [personInt] : [];
 
-      const normStatus = (v?: string) => (v || '').toLowerCase();
-      const allAgree =
-        normStatus(supStatusVal) === 'agree' &&
-        normStatus(staffManagerStatusVal) === 'agree' &&
-        normStatus(managerStatusVal) === 'agree' &&
-        normStatus(directorStatusVal) === 'agree' &&
-        normStatus(vpStatusVal) === 'agree' &&
-        normStatus(cfoStatusVal) === 'agree' &&
-        normStatus(ceoStatusVal) === 'agree' &&
-        normStatus(procurementStatusVal) === 'agree' &&
-        normStatus(financeStatusVal) === 'agree';
+        const url =
+          `${siteUrl}/_api/web/${listNameOrIdExpr(parentRef, parentListEscName)}/items(${itemId})` +
+          `?$select=${selectParts.join(',')}` +
+          (expandParts.length ? `&$expand=${expandParts.join(',')}` : ``);
 
-      if (!allAgree) {
+        try {
+          const spItem = await spGet(url);
+          const personVal = spItem?.[personInt];
+          const name = personVal?.Title;
+          const email = personVal?.EMail;
+          const status = statusInt ? spItem?.[statusInt] : undefined;
+
+          approverInfo[role] = { name, email, status };
+
+          return { role, hasPerson: !!personVal, status };
+        } catch {
+          return { role, hasPerson: false, status: undefined, name: undefined, email: undefined };
+        }
+      }));
+
+      const hasAnyPending = allRolesAgree.some(r => r.hasPerson && r.status && r.status.toLowerCase() !== 'agree');
+      if (hasAnyPending) {
         showSnack('Cannot generate PDF: All approvers must have status "Agree".', 'error');
         return;
       }
-
-      const approverInfo: Record<RoleKey, { name?: string; email?: string }> = {
-        requester: { name: headerDraft.requester?.text, email: headerDraft.requesterEmail || headerDraft.requester?.secondaryText },
-        supervisor: { name: supP ? spItem?.[supP]?.Title : undefined, email: supP ? spItem?.[supP]?.EMail : undefined },
-        staffManager: { name: staffManagerP ? spItem?.[staffManagerP]?.Title : undefined, email: staffManagerP ? spItem?.[staffManagerP]?.EMail : undefined },
-        staffManager2: { name: staffManager2P ? spItem?.[staffManager2P]?.Title : undefined, email: staffManager2P ? spItem?.[staffManager2P]?.EMail : undefined },
-        manager: { name: managerP ? spItem?.[managerP]?.Title : undefined, email: managerP ? spItem?.[managerP]?.EMail : undefined },
-        manager2: { name: manager2P ? spItem?.[manager2P]?.Title : undefined, email: manager2P ? spItem?.[manager2P]?.EMail : undefined },
-        director: { name: directorP ? spItem?.[directorP]?.Title : undefined, email: directorP ? spItem?.[directorP]?.EMail : undefined },
-        vp: { name: vpP ? spItem?.[vpP]?.Title : undefined, email: vpP ? spItem?.[vpP]?.EMail : undefined },
-        cfo: { name: cfoP ? spItem?.[cfoP]?.Title : undefined, email: cfoP ? spItem?.[cfoP]?.EMail : undefined },
-        ceo: { name: ceoP ? spItem?.[ceoP]?.Title : undefined, email: ceoP ? spItem?.[ceoP]?.EMail : undefined },
-        procurement: { name: procurementP ? spItem?.[procurementP]?.Title : undefined, email: procurementP ? spItem?.[procurementP]?.EMail : undefined },
-        finance: { name: financeP ? spItem?.[financeP]?.Title : undefined, email: financeP ? spItem?.[financeP]?.EMail : undefined }
-      };
 
       // ==== Asegurar líneas (por si estado vacío) ====
       let pdfLines = lines;
@@ -3142,7 +3199,9 @@ const loadMySent = React.useCallback(async () => {
         { role: 'Requester',   who: `${approverInfo.requester.name || ''}${approverInfo.requester.email ? ` (${approverInfo.requester.email})` : ''}` },
         { role: 'Supervisor',  who: `${approverInfo.supervisor.name || ''}${approverInfo.supervisor.email ? ` (${approverInfo.supervisor.email})` : ''}`, date: headerDraft.supervisorDate },
         { role: 'Staff Manager',  who: `${approverInfo.staffManager.name || ''}${approverInfo.staffManager.email ? ` (${approverInfo.staffManager.email})` : ''}`, date: headerDraft.staffManagerDate },
+        { role: 'Staff2 Manager',  who: `${approverInfo.staffManager2.name || ''}${approverInfo.staffManager2.email ? ` (${approverInfo.staffManager2.email})` : ''}`, date: headerDraft.staffManager2Date },
         { role: 'Manager',  who: `${approverInfo.manager.name || ''}${approverInfo.manager.email ? ` (${approverInfo.manager.email})` : ''}`, date: headerDraft.managerDate },
+        { role: 'Manager2',  who: `${approverInfo.manager2.name || ''}${approverInfo.manager2.email ? ` (${approverInfo.manager2.email})` : ''}`, date: headerDraft.manager2Date },
         { role: 'Director',  who: `${approverInfo.director.name || ''}${approverInfo.director.email ? ` (${approverInfo.director.email})` : ''}`, date: headerDraft.directorDate },
         { role: 'VP',  who: `${approverInfo.vp.name || ''}${approverInfo.vp.email ? ` (${approverInfo.vp.email})` : ''}`, date: headerDraft.vpDate },
         { role: 'CFO',  who: `${approverInfo.cfo.name || ''}${approverInfo.cfo.email ? ` (${approverInfo.cfo.email})` : ''}`, date: headerDraft.cfoDate },
