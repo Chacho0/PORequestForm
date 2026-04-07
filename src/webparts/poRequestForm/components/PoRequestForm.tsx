@@ -2,10 +2,28 @@
 import * as React from 'react';
 import styles from './PoRequestForm.module.scss';
 import { IPoRequestFormProps } from './IPoRequestFormProps';
-
-// People Picker (PnP SPFx Controls)
 import { PeoplePicker, PrincipalType, IPeoplePickerUserItem } from '@pnp/spfx-controls-react/lib/PeoplePicker';
 import { IPeoplePickerContext } from '@pnp/spfx-controls-react/lib/controls/peoplepicker/IPeoplePickerContext';
+
+const Section = (p: { title: string; code?: string; children: React.ReactNode }) => (
+  <section className={styles.sectionCard}>
+    <div className={styles.sectionHead}>
+      <div className={styles.secTitle}>{p.title}</div>
+      {p.code ? <div className={styles.secCode}>{p.code}</div> : null}
+    </div>
+    {p.children}
+  </section>
+);
+
+const PersonView = React.memo(({ label, person }: { label: string; person?: IPeoplePickerUserItem | null }) => (
+  <div className={styles.fieldGroup}>
+    <label className={styles.fieldLabel}>{label}</label>
+    <div className={styles.readonlyBox}>
+      {person?.text || person?.secondaryText || '(not assigned)'}
+    </div>
+  </div>
+));
+PersonView.displayName = 'PersonView';
 
 // SPFx HTTP
 import { SPHttpClient, HttpClient } from '@microsoft/sp-http';
@@ -374,7 +392,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   };
 
   const [headerDraft, setHeaderDraft] = React.useState<PRHeader>(initialHeader);
-  const [lines, setLines] = React.useState<PRLine[]>([{ id: 1, qty: 1, unitPrice: 0, tax: 0, currency: 'USD' }]);
+  const [lines, setLines] = React.useState<PRLine[]>([{ id: 1, qty: 1, unitPrice: 0, tax: 0, currency: 'CAD' }]);
   const [suppliers, setSuppliers] = React.useState<SupplierLine[]>([{ id: 1, name: '', contact: '', email: '' }]);
   const [files, setFiles] = React.useState<File[]>([]);
   const attachInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -440,30 +458,6 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     },
     [setSnack]
   );
-
-  // Focus keeper
-  const useFocusKeeper = () => {
-    const last = React.useRef<{ id?: string; start?: number | null; end?: number | null } | null>(null);
-    const keepFocus = <E extends HTMLInputElement | HTMLTextAreaElement>(id: string, updater: (ev: React.ChangeEvent<E>) => void) =>
-      (ev: React.ChangeEvent<E>) => {
-        const el = ev.currentTarget;
-        last.current = { id, start: el.selectionStart, end: el.selectionEnd };
-        updater(ev);
-        requestAnimationFrame(() => {
-          const target = document.getElementById(id) as E | null;
-          if (target) {
-            try {
-              target.focus();
-              if (last.current?.start != null && last.current?.end != null) {
-                target.setSelectionRange(last.current.start!, last.current.end!);
-              }
-            } catch { /* ignore */ }
-          }
-        });
-      };
-    return { keepFocus };
-  };
-  const { keepFocus } = useFocusKeeper();
 
   // Lock por aprobaciones
   const [hasAnyApproval, setHasAnyApproval] = React.useState<boolean>(false);
@@ -2114,7 +2108,7 @@ const loadMySent = React.useCallback(async () => {
           putNum('Qty', safeNum(ln.qty), CHILD_INTERNALS.qty);
           putText('UoM', ln.uom, CHILD_INTERNALS.uom);
           putNum('Unit Price', safeNum(ln.unitPrice), CHILD_INTERNALS.unitPrice);
-          putText('Currency', ln.currency || 'USD', CHILD_INTERNALS.currency);
+          putText('Currency', ln.currency || 'CAD', CHILD_INTERNALS.currency);
           putNum('Tax', 0, CHILD_INTERNALS.tax);
 
           const lineTotal = Number(
@@ -2223,7 +2217,7 @@ const loadMySent = React.useCallback(async () => {
       setNum('Qty', safeNum(ln.qty));
       setText('UoM', ln.uom);
       setNum('Unit Price', safeNum(ln.unitPrice));
-      setText('Currency', ln.currency || 'USD');
+      setText('Currency', ln.currency || 'CAD');
       setNum('Tax', 0);
       setNum('Total', Number((safeNum(ln.qty) * safeNum(ln.unitPrice)).toFixed(2)));
       await childList.items.add(bodyLine);
@@ -2468,20 +2462,19 @@ const loadMySent = React.useCallback(async () => {
     }
   };
 
-  const resetFormState = () => {
+  const resetFormState = React.useCallback(() => {
     const fresh = { ...initialHeader, requestDate: getTodayYmd() };
     setHeaderDraft(fresh);
-    setLines([{ id: 1, qty: 1, unitPrice: 0, tax: 0, currency: 'USD' }]);
+    setLines([{ id: 1, qty: 1, unitPrice: 0, tax: 0, currency: 'CAD' }]);
     setSuppliers([{ id: 1, name: '', contact: '', email: '' }]);
     setFiles([]); if (attachInputRef.current) attachInputRef.current.value = '';
     setEditingItemId(null);
     setHasAnyApproval(false);
     setSignFormRoles(null);
     setGlNoPagination(false);
-  };
+  }, []);
 
-  // SWITCH VIEW
-  const switchView = async (v: typeof activeView) => {
+  const switchView = React.useCallback(async (v: typeof activeView) => {
     if (v === 'new') {
       resetFormState();
     } else {
@@ -2494,7 +2487,7 @@ const loadMySent = React.useCallback(async () => {
     if (v === 'mysent') await loadMySent();
     if (v === 'tosign') await loadMyToSign();
     if (v === 'approved') await loadMyApproved();
-  };
+  }, [resetFormState]);
 
   /* =================== Load item into form =================== */
   const loadItemIntoForm = async (itemId: number, opts?: { signRoles?: RoleKey[] }) => {
@@ -2665,12 +2658,12 @@ const loadMySent = React.useCallback(async () => {
             qty:         IN_QTY  ? num(r[IN_QTY])     : 0,
             uom:         IN_UOM  ? (r[IN_UOM]  ?? '') : '',
             unitPrice:   IN_UNIT ? num(r[IN_UNIT])    : 0,
-            currency:    IN_CURR ? (r[IN_CURR] ?? 'USD') : 'USD',
+            currency:    IN_CURR ? (r[IN_CURR] ?? 'CAD') : 'CAD',
             tax:         IN_TAX  ? num(r[IN_TAX])     : 0,
             total:       IN_TOTAL? num(r[IN_TOTAL])   : 0,
           }));
 
-          setLines(parsed.length ? parsed : [{ id: 1, qty: 1, unitPrice: 0, tax: 0, currency: 'USD' }]);
+          setLines(parsed.length ? parsed : [{ id: 1, qty: 1, unitPrice: 0, tax: 0, currency: 'CAD' }]);
         }
       }
 
@@ -2822,13 +2815,13 @@ const loadMySent = React.useCallback(async () => {
     }
   };
 
-  const handleApprove = async (role: RoleKey) => {
+  const handleApprove = React.useCallback(async (role: RoleKey) => {
     await applyDecision(role, 'Agree');
-  };
+  }, []);
 
-  const handleDisagree = async (role: RoleKey) => {
+  const handleDisagree = React.useCallback(async (role: RoleKey) => {
     await applyDecision(role, 'Disagree');
-  };
+  }, []);
 
   /* =================== PDF =================== */
   const handleGeneratePdf = async (item?: any) => {
@@ -2959,7 +2952,7 @@ const loadMySent = React.useCallback(async () => {
             qty: Number(pick(r, ['Qty'])) || 0,
             uom: pick(r, ['UoM']),
             unitPrice: Number(pick(r, ['Unit Price'])) || 0,
-            currency: pick(r, ['Currency']) || 'USD',
+            currency: pick(r, ['Currency']) || 'CAD',
             tax: Number(pick(r, ['Tax'])) || 0,
             total: Number(pick(r, ['Total'])) || 0
           }));
@@ -3134,7 +3127,7 @@ const loadMySent = React.useCallback(async () => {
           String(l.qty ?? ''),
           l.uom || '',
           currencyFmt(l.unitPrice),
-          l.currency || 'USD',
+          l.currency || 'CAD',
           currencyFmt(l.total || 0)
         ]),
         theme: 'grid',
@@ -3232,128 +3225,90 @@ const loadMySent = React.useCallback(async () => {
 
   /* =================== UI helpers =================== */
   // Non-picker inputs
-  const onHeaderText = (k: keyof PRHeader) =>
+  const onHeaderText = React.useCallback((k: keyof PRHeader) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const v = e.target.value;
       setHeaderDraft(prev => ({ ...prev, [k]: v as any }));
-    };
+    }, []);
 
-  const onHeaderSelect = (k: keyof PRHeader) =>
+  const onHeaderSelect = React.useCallback((k: keyof PRHeader) =>
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const v = e.target.value;
       setHeaderDraft(prev => ({ ...prev, [k]: v as any }));
-    };
+    }, []);
 
-  const onHeaderCheck = (k: keyof PRHeader) =>
+  const onHeaderCheck = React.useCallback((k: keyof PRHeader) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const v = e.target.checked as any;
       setHeaderDraft(prev => ({ ...prev, [k]: v }));
-    };
+    }, []);
 
-  const onHeaderRadio = <K extends keyof PRHeader>(k: K, val: PRHeader[K]) =>
-    () => { setHeaderDraft(prev => ({ ...prev, [k]: val })); };
+  const onHeaderRadio = React.useCallback(<K extends keyof PRHeader>(k: K, val: PRHeader[K]) =>
+    () => { setHeaderDraft(prev => ({ ...prev, [k]: val })); }, []);
 
   // PeoplePicker
-  const onPicker =
-    (k: keyof PRHeader) =>
-      async (items: any[]) => {
-        const picked = items?.[0] ?? null;
-        setHeaderDraft(prev => ({ ...prev, [k]: picked }));
+  const onPicker = React.useCallback((k: keyof PRHeader) =>
+    async (items: any[]) => {
+      const picked = items?.[0] ?? null;
+      setHeaderDraft(prev => ({ ...prev, [k]: picked }));
 
-        if (k === 'requester' && picked) {
-          try {
-            let email = picked.secondaryText || picked.text || '';
-            let userId: number | null = null;
-            const login = picked.secondaryText || picked.loginName || picked.text || '';
-            if (login) userId = await ensureUserIdSmart(login);
-            if (userId) {
-              try {
-                const u = await sp.web.getUserById(userId)();
-                email = u?.Email || email;
-              } catch { /* ignore */ }
-            }
-            if (email) {
-              setHeaderDraft(prev => ({ ...prev, requesterEmail: email }));
-            }
-          } catch { /* ignore */ }
-        }
-      };
+      if (k === 'requester' && picked) {
+        try {
+          let email = picked.secondaryText || picked.text || '';
+          let userId: number | null = null;
+          const login = picked.secondaryText || picked.loginName || picked.text || '';
+          if (login) userId = await ensureUserIdSmart(login);
+          if (userId) {
+            try {
+              const u = await sp.web.getUserById(userId)();
+              email = u?.Email || email;
+            } catch { /* ignore */ }
+          }
+          if (email) {
+            setHeaderDraft(prev => ({ ...prev, requesterEmail: email }));
+          }
+        } catch { /* ignore */ }
+      }
+    }, [ensureUserIdSmart, sp]);
 
-  const onAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onAttach = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const fs = Array.from(e.target.files || []);
     setFiles(prev => [...prev, ...fs]);
-  };
+  }, []);
 
-  const addLine = () =>
-    setLines(ls => {
-      const maxId = ls.reduce((m, it) => Math.max(m, it.id ?? 0), 0);
-      return [...ls, { id: maxId + 1, qty: 1, unitPrice: 0, tax: 0, currency: 'USD' }];
-    });
-
-  const calcLineTotal = (l: PRLine) => {
+  const calcLineTotal = React.useCallback((l: PRLine) => {
     const sub = safeNum(l.qty) * safeNum(l.unitPrice);
     return Number(sub.toFixed(2));
-  };
+  }, []);
 
-  const updateLine = (id: number, patch: Partial<PRLine>) =>
-    setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch, total: calcLineTotal({ ...l, ...patch }) } : l));
+  const addLine = React.useCallback(() =>
+    setLines(ls => {
+      const maxId = ls.reduce((m, it) => Math.max(m, it.id ?? 0), 0);
+      return [...ls, { id: maxId + 1, qty: 1, unitPrice: 0, tax: 0, currency: 'CAD' }];
+    }), []);
 
-  const removeLine = (id: number) => setLines(ls => ls.filter(l => l.id !== id));
+  const updateLine = React.useCallback((id: number, patch: Partial<PRLine>) =>
+    setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch, total: calcLineTotal({ ...l, ...patch }) } : l)), [calcLineTotal]);
 
-  /** Acciones para proveedores sugeridos */
-  const addSupplier = () =>
+  const removeLine = React.useCallback((id: number) => setLines(ls => ls.filter(l => l.id !== id)), []);
+
+  const addSupplier = React.useCallback(() =>
     setSuppliers(sups => {
       const maxId = sups.reduce((m, it) => Math.max(m, it.id ?? 0), 0);
       return [...sups, { id: maxId + 1, name: '', contact: '', email: '' }];
-    });
+    }), []);
 
-  const updateSupplier = (id: number, patch: Partial<SupplierLine>) =>
-    setSuppliers(sups => sups.map(s => s.id === id ? { ...s, ...patch } : s));
+  const updateSupplier = React.useCallback((id: number, patch: Partial<SupplierLine>) =>
+    setSuppliers(sups => sups.map(s => s.id === id ? { ...s, ...patch } : s)), []);
 
-  const removeSupplier = (id: number) =>
-    setSuppliers(sups => sups.filter(s => s.id !== id));
+  const removeSupplier = React.useCallback((id: number) =>
+    setSuppliers(sups => sups.filter(s => s.id !== id)), []);
 
   React.useEffect(() => {
     setLines(ls => ls.map(l => ({ ...l, total: calcLineTotal(l) })));
-  }, []);
-
-  const Section = (p: { title: string; code?: string; children: React.ReactNode }) => (
-    <section className={styles.sectionCard}>
-      <div className={styles.sectionHead}>
-        <div className={styles.secTitle}>{p.title}</div>
-        {p.code ? <div className={styles.secCode}>{p.code}</div> : null}
-      </div>
-      {p.children}
-    </section>
-  );
+  }, [calcLineTotal]);
 
   const isLocked = hasAnyApproval;
-
-  const PersonView = ({ label, person }: { label: string; person?: IPeoplePickerUserItem | null }) => (
-    <div className={styles.fieldGroup}>
-      <label className={styles.fieldLabel}>{label}</label>
-      <div className={styles.readonlyBox}>
-        {person?.text || person?.secondaryText || '(not assigned)'}
-      </div>
-    </div>
-  );
-
-  const DateInput = ({ label, k }: { label: string; k: keyof PRHeader }) => {
-    const isNew = !editingItemId;
-    if (isNew) return null;
-    return (
-      <div className={styles.fieldGroup}>
-        <label className={styles.fieldLabel}>{label}</label>
-        <input
-          className={styles.input}
-          type="date"
-          value={(headerDraft[k] as string) || ''}
-          onChange={onHeaderText(k)}
-          disabled={true}
-        />
-      </div>
-    );
-  };
 
   const mySentPaged = React.useMemo(() => {
     const start = (mySentPage - 1) * MY_SENT_PAGE_SIZE;
@@ -3456,7 +3411,7 @@ const loadMySent = React.useCallback(async () => {
                   id="fld-requesterEmail"
                   className={styles.input}
                   value={headerDraft.requesterEmail || ''}
-                  onChange={keepFocus('fld-requesterEmail', onHeaderText('requesterEmail'))}
+                  onChange={onHeaderText('requesterEmail')}
                   disabled={roAll}
                 />
               </div>
@@ -3495,13 +3450,13 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.select}
                     value={projOpen ? projSearch : (projDisplayValue || '')}
                     placeholder="Search / Select Project"
-                    onChange={keepFocus('fld-areaProject', (e) => {
+                    onChange={(e) => {
                       if (roAll) return;
                       setProjSearch(e.target.value);
                       if (!projOpen) setProjOpen(true);
                       setGlOpen(false);
                       setCompanyOpen(false);
-                    })}
+                    }}
                     onFocus={() => {
                       if (roAll) return;
                       setProjOpen(true);
@@ -3686,13 +3641,13 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.select}
                     value={glOpen ? glSearch : (glDisplayValue || '')}
                     placeholder="Search / Select GL Code"
-                    onChange={keepFocus('fld-glCode', (e) => {
+                    onChange={(e) => {
                       if (roAll) return;
                       setGlSearch(e.target.value);
                       if (!glOpen) setGlOpen(true);
                       setProjOpen(false);
                       setCompanyOpen(false);
-                    })}
+                    }}
                     onFocus={() => {
                       if (roAll) return;
                       setGlOpen(true);
@@ -3930,7 +3885,7 @@ const loadMySent = React.useCallback(async () => {
                   className={styles.input}
                   type="date"
                   value={headerDraft.requestDate || ''}
-                  onChange={keepFocus('fld-requestDate', onHeaderText('requestDate'))}
+                  onChange={onHeaderText('requestDate')}
                   disabled={roAll}
                 />
               </div>
@@ -3941,7 +3896,7 @@ const loadMySent = React.useCallback(async () => {
                   className={styles.input}
                   type="date"
                   value={headerDraft.requiredByDate || ''}
-                  onChange={keepFocus('fld-requiredByDate', onHeaderText('requiredByDate'))}
+                  onChange={onHeaderText('requiredByDate')}
                   disabled={roAll}
                 />
               </div>
@@ -3954,13 +3909,13 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.select}
                     value={companyOpen ? companySearch : (companyDisplayValue || '')}
                     placeholder="Search / Select Company"
-                    onChange={keepFocus('fld-company', (e) => {
+                    onChange={(e) => {
                       if (roAll) return;
                       setCompanySearch(e.target.value);
                       if (!companyOpen) setCompanyOpen(true);
                       setProjOpen(false);
                       setGlOpen(false);
-                    })}
+                    }}
                     onFocus={() => {
                       if (roAll) return;
                       setCompanyOpen(true);
@@ -4218,7 +4173,7 @@ const loadMySent = React.useCallback(async () => {
                   id="fld-urgentJustification"
                   className={styles.input}
                   value={headerDraft.urgentJustification || ''}
-                  onChange={keepFocus('fld-urgentJustification', onHeaderText('urgentJustification'))}
+                  onChange={onHeaderText('urgentJustification')}
                   placeholder="Only if urgent"
                   disabled={roAll}
                 />
@@ -4247,7 +4202,7 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.input}
                     placeholder="Supplier Name"
                     value={s.name || ''}
-                    onChange={keepFocus(`sup-name-${s.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateSupplier(s.id!, { name: e.target.value }))}
+                    onChange={(e) => updateSupplier(s.id!, { name: e.target.value })}
                     readOnly={roAll}
                   />
                   <input
@@ -4255,7 +4210,7 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.input}
                     placeholder="Contact (optional)"
                     value={s.contact || ''}
-                    onChange={keepFocus(`sup-contact-${s.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateSupplier(s.id!, { contact: e.target.value }))}
+                    onChange={(e) => updateSupplier(s.id!, { contact: e.target.value })}
                     readOnly={roAll}
                   />
                   <input
@@ -4264,7 +4219,7 @@ const loadMySent = React.useCallback(async () => {
                     type="email"
                     placeholder="Email (optional)"
                     value={s.email || ''}
-                    onChange={keepFocus(`sup-email-${s.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateSupplier(s.id!, { email: e.target.value }))}
+                    onChange={(e) => updateSupplier(s.id!, { email: e.target.value })}
                     readOnly={roAll}
                   />
                   {!roAll && (
@@ -4308,7 +4263,7 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.input}
                     placeholder="Describe the item/service"
                     value={l.description || ''}
-                    onChange={keepFocus(`ln-desc-${l.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateLine(l.id!, { description: e.target.value }))}
+                    onChange={(e) => updateLine(l.id!, { description: e.target.value })}
                     readOnly={roAll}
                   />
                   <input
@@ -4316,7 +4271,7 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.input}
                     placeholder="SKU/Part"
                     value={l.sku || ''}
-                    onChange={keepFocus(`ln-sku-${l.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateLine(l.id!, { sku: e.target.value }))}
+                    onChange={(e) => updateLine(l.id!, { sku: e.target.value })}
                     readOnly={roAll}
                   />
                   <input
@@ -4325,7 +4280,7 @@ const loadMySent = React.useCallback(async () => {
                     type="number"
                     min={0}
                     value={l.qty ?? 0}
-                    onChange={keepFocus(`ln-qty-${l.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateLine(l.id!, { qty: parseFloat(e.target.value || '0') }))}
+                    onChange={(e) => updateLine(l.id!, { qty: parseFloat(e.target.value || '0') })}
                     readOnly={roAll}
                   />
                   <input
@@ -4333,7 +4288,7 @@ const loadMySent = React.useCallback(async () => {
                     className={styles.input}
                     placeholder="UoM"
                     value={l.uom || ''}
-                    onChange={keepFocus(`ln-uom-${l.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateLine(l.id!, { uom: e.target.value }))}
+                    onChange={(e) => updateLine(l.id!, { uom: e.target.value })}
                     readOnly={roAll}
                   />
                   <input
@@ -4343,15 +4298,15 @@ const loadMySent = React.useCallback(async () => {
                     step="0.01"
                     min={0}
                     value={l.unitPrice ?? 0}
-                    onChange={keepFocus(`ln-unitPrice-${l.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateLine(l.id!, { unitPrice: parseFloat(e.target.value || '0') }))}
+                    onChange={(e) => updateLine(l.id!, { unitPrice: parseFloat(e.target.value || '0') })}
                     readOnly={roAll}
                   />
                   <input
                     id={`ln-currency-${l.id}`}
                     className={styles.input}
-                    placeholder="USD"
-                    value={l.currency || 'USD'}
-                    onChange={keepFocus(`ln-currency-${l.id}`, (e: React.ChangeEvent<HTMLInputElement>) => updateLine(l.id!, { currency: e.target.value }))}
+                    placeholder="CAD"
+                    value={l.currency || 'CAD'}
+                    onChange={(e) => updateLine(l.id!, { currency: e.target.value })}
                     readOnly={roAll}
                   />
                   <input className={styles.input} readOnly value={currencyFmt(l.total || 0)} />
@@ -4397,7 +4352,7 @@ const loadMySent = React.useCallback(async () => {
                 className={styles.textarea}
                 style={{ height: '536px' }}
                 value={headerDraft.needObjective || ''}
-                onChange={keepFocus('fld-needObjective', onHeaderText('needObjective'))}
+                onChange={onHeaderText('needObjective')}
                 readOnly={roAll}
               />
             </div>
@@ -4424,7 +4379,7 @@ const loadMySent = React.useCallback(async () => {
                   id="fld-soleSourceExplanation"
                   className={styles.input}
                   value={headerDraft.soleSourceExplanation || ''}
-                  onChange={keepFocus('fld-soleSourceExplanation', onHeaderText('soleSourceExplanation'))}
+                  onChange={onHeaderText('soleSourceExplanation')}
                   disabled={roAll}
                 />
               </div>
@@ -4482,9 +4437,9 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Supervisor" person={headerDraft.supervisor} />
                   <div className={styles.grid3}>
-                    <DateInput label="Supervisor Date" k="supervisorDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Supervisor Date</label><input className={styles.input} type="date" value={headerDraft.supervisorDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
-                      <label className={styles.fieldLabel}>Supervisor Status</label>
+                      <label className={styles.fieldLabel}>Direct Supervisor Status</label>
                       <div className={styles.readonlyBox}>
                         {headerDraft.supervisorStatus || 'Pending'}
                       </div>
@@ -4495,7 +4450,7 @@ const loadMySent = React.useCallback(async () => {
               ) : (
                 <>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.fieldLabel}>Supervisor</label>
+                    <label className={styles.fieldLabel}>Direct Supervisor</label>
                     <div className={styles.peoplePicker}>
                       <PeoplePicker
                         context={peopleCtx}
@@ -4511,9 +4466,9 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Supervisor Date" k="supervisorDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Supervisor Date</label><input className={styles.input} type="date" value={headerDraft.supervisorDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
-                      <label className={styles.fieldLabel}>Supervisor Status</label>
+                      <label className={styles.fieldLabel}>Direct Supervisor Status</label>
                       <div className={styles.readonlyBox}>
                         {headerDraft.supervisorStatus || 'Pending'}
                       </div>
@@ -4527,7 +4482,7 @@ const loadMySent = React.useCallback(async () => {
                               className={styles.saveBtn}
                               onClick={() => handleApprove('supervisor')}
                             >
-                              Agree as Supervisor
+                              Agree as Direct Supervisor
                             </button>
                             <button
                               type="button"
@@ -4554,7 +4509,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Staff Manager" person={headerDraft.staffManager} />
                   <div className={styles.grid3}>
-                    <DateInput label="Staff Manager Date" k="staffManagerDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Staff Manager Date</label><input className={styles.input} type="date" value={headerDraft.staffManagerDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Staff Manager Status</label>
                       <div className={styles.readonlyBox}>
@@ -4583,7 +4538,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Staff Manager Date" k="staffManagerDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Staff Manager Date</label><input className={styles.input} type="date" value={headerDraft.staffManagerDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Staff Manager Status</label>
                       <div className={styles.readonlyBox}>
@@ -4626,7 +4581,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Staff2" person={headerDraft.staffManager2} />
                   <div className={styles.grid3}>
-                    <DateInput label="Staff2 Date" k="staffManager2Date" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Staff2 Date</label><input className={styles.input} type="date" value={headerDraft.staffManager2Date || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>gulp
                       <label className={styles.fieldLabel}>Staff Status</label>
                       <div className={styles.readonlyBox}>
@@ -4655,7 +4610,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Staff2 Date" k="staffManager2Date" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Staff2 Date</label><input className={styles.input} type="date" value={headerDraft.staffManager2Date || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Staff Status</label>
                       <div className={styles.readonlyBox}>
@@ -4698,7 +4653,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Manager" person={headerDraft.manager} />
                   <div className={styles.grid3}>
-                    <DateInput label="Manager Date" k="managerDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Manager Date</label><input className={styles.input} type="date" value={headerDraft.managerDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Manager Status</label>
                       <div className={styles.readonlyBox}>
@@ -4727,7 +4682,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Manager Date" k="managerDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Manager Date</label><input className={styles.input} type="date" value={headerDraft.managerDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Manager Status</label>
                       <div className={styles.readonlyBox}>
@@ -4770,7 +4725,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Manager2" person={headerDraft.manager2} />
                   <div className={styles.grid3}>
-                    <DateInput label="Manager2 Date" k="manager2Date" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Manager2 Date</label><input className={styles.input} type="date" value={headerDraft.manager2Date || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Manager Status</label>
                       <div className={styles.readonlyBox}>
@@ -4799,7 +4754,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Manager2 Date" k="manager2Date" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Manager2 Date</label><input className={styles.input} type="date" value={headerDraft.manager2Date || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Manager Status</label>
                       <div className={styles.readonlyBox}>
@@ -4842,7 +4797,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Director" person={headerDraft.director} />
                   <div className={styles.grid3}>
-                    <DateInput label="Director Date" k="directorDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Director Date</label><input className={styles.input} type="date" value={headerDraft.directorDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Director Status</label>
                       <div className={styles.readonlyBox}>
@@ -4871,7 +4826,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Director Date" k="directorDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Director Date</label><input className={styles.input} type="date" value={headerDraft.directorDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Director Status</label>
                       <div className={styles.readonlyBox}>
@@ -4914,7 +4869,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="VP" person={headerDraft.vp} />
                   <div className={styles.grid3}>
-                    <DateInput label="VP Date" k="vpDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>VP Date</label><input className={styles.input} type="date" value={headerDraft.vpDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>VP Status</label>
                       <div className={styles.readonlyBox}>
@@ -4943,7 +4898,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="VP Date" k="vpDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>VP Date</label><input className={styles.input} type="date" value={headerDraft.vpDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>VP Status</label>
                       <div className={styles.readonlyBox}>
@@ -4986,7 +4941,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="CFO" person={headerDraft.cfo} />
                   <div className={styles.grid3}>
-                    <DateInput label="CFO Date" k="cfoDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>CFO Date</label><input className={styles.input} type="date" value={headerDraft.cfoDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>CFO Status</label>
                       <div className={styles.readonlyBox}>
@@ -5015,7 +4970,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="CFO Date" k="cfoDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>CFO Date</label><input className={styles.input} type="date" value={headerDraft.cfoDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>CFO Status</label>
                       <div className={styles.readonlyBox}>
@@ -5058,7 +5013,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="CEO" person={headerDraft.ceo} />
                   <div className={styles.grid3}>
-                    <DateInput label="CEO Date" k="ceoDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>CEO Date</label><input className={styles.input} type="date" value={headerDraft.ceoDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>CEO Status</label>
                       <div className={styles.readonlyBox}>
@@ -5087,7 +5042,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="CEO Date" k="ceoDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>CEO Date</label><input className={styles.input} type="date" value={headerDraft.ceoDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>CEO Status</label>
                       <div className={styles.readonlyBox}>
@@ -5130,7 +5085,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Procurement" person={headerDraft.procurement} />
                   <div className={styles.grid3}>
-                    <DateInput label="Procurement Date" k="procurementDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Procurement Date</label><input className={styles.input} type="date" value={headerDraft.procurementDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Procurement Status</label>
                       <div className={styles.readonlyBox}>
@@ -5159,7 +5114,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Procurement Date" k="procurementDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Procurement Date</label><input className={styles.input} type="date" value={headerDraft.procurementDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Procurement Status</label>
                       <div className={styles.readonlyBox}>
@@ -5202,7 +5157,7 @@ const loadMySent = React.useCallback(async () => {
                 <>
                   <PersonView label="Finance (Final)" person={headerDraft.finance} />
                   <div className={styles.grid3}>
-                    <DateInput label="Finance Date" k="financeDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Finance Date</label><input className={styles.input} type="date" value={headerDraft.financeDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Finance Status</label>
                       <div className={styles.readonlyBox}>
@@ -5231,7 +5186,7 @@ const loadMySent = React.useCallback(async () => {
                     </div>
                   </div>
                   <div className={styles.grid3}>
-                    <DateInput label="Finance Date" k="financeDate" />
+                    <div className={styles.fieldGroup}><label className={styles.fieldLabel}>Finance Date</label><input className={styles.input} type="date" value={headerDraft.financeDate || ''} disabled={true} /></div>
                     <div className={styles.fieldGroup}>
                       <label className={styles.fieldLabel}>Finance Status</label>
                       <div className={styles.readonlyBox}>
@@ -5275,7 +5230,7 @@ const loadMySent = React.useCallback(async () => {
                   id="fld-poNumber"
                   className={styles.input}
                   value={headerDraft.poNumber || ''}
-                  onChange={keepFocus('fld-poNumber', onHeaderText('poNumber'))}
+                  onChange={onHeaderText('poNumber')}
                   placeholder="PO-####-####"
                   disabled={readOnlyMode !== null}
                 />

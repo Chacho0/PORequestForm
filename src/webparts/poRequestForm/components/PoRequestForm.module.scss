@@ -30,6 +30,7 @@
   display: flex;
   justify-content: center;
   background: transparent;
+  scroll-margin-top: 20px;
 
   :global(*) { box-sizing: border-box; }
   :global(*:focus) { outline: none; }
@@ -40,6 +41,7 @@
   max-width: 1100px;
   padding: 1.25rem;
   box-sizing: border-box;
+  scroll-margin-top: 20px;
 }
 
 /* ========= Header + Tabs ========= */
@@ -84,6 +86,7 @@
   padding: 1.5rem 2rem;
   margin-bottom: 1.25rem;
   overflow: visible;
+  scroll-margin-top: 20px;
 }
 
 .sectionHead {
