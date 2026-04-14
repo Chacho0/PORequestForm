@@ -912,7 +912,9 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   // Resetear todos los aprobadores excepto supervisor
   const resetApprovers: Partial<PRHeader> = {
     staffManager: null,
+    staffManager2: null,
     manager: null,
+    manager2: null,
     director: null,
     vp: null,
     cfo: null,
@@ -925,12 +927,25 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   // Mostrar solo los aprobadores requeridos
   const rolesToShow: RoleKey[] = ['supervisor', ...requiredRoles.filter(r => r !== 'supervisor')];
 
-  // Filtrar las reglas de autorización para el área y tipo de presupuesto
-  const applicableRules = authorizationRules.filter(
-    rule => norm(rule.Department) === norm(headerDraft.area) &&
-            rule.BudgetType === headerDraft.budgetType &&
-            rule.IsActive
-  );
+  // Filtrar las reglas de autorización para el área, tipo de presupuesto Y MONTO
+  const applicableRules = authorizationRules.filter(rule => {
+    if (norm(rule.Department) !== norm(headerDraft.area)) return false;
+    if (rule.BudgetType !== headerDraft.budgetType) return false;
+    if (!rule.IsActive) return false;
+
+    // Filtrar por monto - usar != null para distinguir entre 0 y null
+    const hasMin = rule.MinLimit != null;
+    const hasMax = rule.MaxLimit != null;
+
+    if (hasMin && hasMax) {
+      return totalAmount >= rule.MinLimit! && totalAmount <= rule.MaxLimit!;
+    } else if (hasMin) {
+      return totalAmount >= rule.MinLimit!;
+    } else if (hasMax) {
+      return totalAmount <= rule.MaxLimit!;
+    }
+    return false; // Sin límites no es válido
+  });
 
   // Mapeo de roles a palabras clave en Position
   const positionKeywords: Record<Exclude<RoleKey, 'requester'>, string[]> = {
@@ -947,30 +962,26 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
     finance: ['finance']
   };
 
-  // Para cada rol requerido, buscar en las reglas
+  // Para cada rol requerido, buscar en las reglas que aplican por monto
   for (const role of rolesToShow) {
     if (role === 'requester' || role === 'supervisor') continue;
 
     const keywords = positionKeywords[role];
     let foundRule: AuthorizationRule | null = null;
 
-    // Buscar la regla que coincida con las palabras clave del rol
+    // Buscar la regla que coincida con las palabras clave del rol Y el monto
     for (const rule of applicableRules) {
       const posNorm = norm(rule.Position);
       let matches = false;
 
       // Lógica especial para Staff/Staff2 y Manager/Manager2
       if (role === 'staffManager') {
-        // Busca "staff" pero NO "staff2"
         matches = posNorm.includes('staff') && !posNorm.includes('staff2');
       } else if (role === 'staffManager2') {
-        // Busca específicamente "staff2"
         matches = posNorm.includes('staff2');
       } else if (role === 'manager') {
-        // Busca "manager" pero NO "manager2"
         matches = posNorm.includes('manager') && !posNorm.includes('manager2');
       } else if (role === 'manager2') {
-        // Busca específicamente "manager2"
         matches = posNorm.includes('manager2');
       } else {
         matches = keywords.every(kw => posNorm.includes(kw));
@@ -1000,6 +1011,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
       }));
     }
   }
+  setApproversAutoPopulated(true);
 }, [headerDraft.area, headerDraft.budgetType, lines, getRequiredAuthorizers, authorizationRules]);
   
   const loadGlCodes = React.useCallback(async () => {
@@ -1082,6 +1094,7 @@ const PoRequestForm: React.FC<IPoRequestFormProps> = (props) => {
   const [glPage, setGlPage] = React.useState<number>(1);
   const [glOpenUp, setGlOpenUp] = React.useState<boolean>(false);
   const [glNoPagination, setGlNoPagination] = React.useState<boolean>(false);
+  const [approversAutoPopulated, setApproversAutoPopulated] = React.useState<boolean>(false);
   const glWrapRef = React.useRef<HTMLDivElement>(null);
   const glInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -2472,6 +2485,7 @@ const loadMySent = React.useCallback(async () => {
     setHasAnyApproval(false);
     setSignFormRoles(null);
     setGlNoPagination(false);
+    setApproversAutoPopulated(false);
   }, []);
 
   const switchView = React.useCallback(async (v: typeof activeView) => {
@@ -3361,11 +3375,11 @@ const loadMySent = React.useCallback(async () => {
       // Si es modo lectura (mysent / tosign), solo mostrar roles con persona asignada
       if (roAll) return hasPersonAssigned(role);
       
-      // Si estamos en modo nuevo, mostrar solo los requeridos
+      // Si estamos en modo nuevo, solo mostrar después de auto-populate Y con persona asignada
       if (!editingItemId) {
-        const totalAmount = lines.reduce((s, l) => s + safeNum(l.qty) * safeNum(l.unitPrice), 0);
-        const requiredRoles = getRequiredAuthorizers(headerDraft.area || '', headerDraft.budgetType || 'Budgeted', totalAmount);
-        return requiredRoles.includes(role);
+        if (!approversAutoPopulated) return false;
+        // Solo mostrar si ya tiene persona asignada
+        return hasPersonAssigned(role);
       }
       
       // Si estamos editando, mostrar el campo si ya tiene un valor asignado
